@@ -99,6 +99,7 @@
 <body>
 <header>
   <h1>7 Wonders Duel <small>bot arena</small></h1>
+  <a href="/table" style="color:var(--accent);text-decoration:none;font-weight:600">Watch at the table →</a>
   <label for="runPicker" style="color:var(--muted)">Showing</label>
   <select id="runPicker"></select>
 </header>
@@ -292,6 +293,7 @@ function render() {
       <div class="row"><div style="flex:1"><b>${stateText}</b> · ${run.done} of ${s.games} games${run.failed.length ? ` · ${run.failed.length} crashed` : ''}
         · ${fmtDur(run.elapsed_ms)} elapsed${eta}</div>
         ${run.state === 'running' ? '<button class="danger" id="stopBtn">Stop</button>' : ''}</div>
+      ${run.state === 'running' && run.running.length ? `<div class="hint" style="margin:4px 0 0">Watch live at the table: ${run.running.map(n => `<a href="/table#${run.id}/${n}">game ${n}</a>`).join(' · ')}</div>` : ''}
       <div class="bar"><i style="width:${100 * run.done / s.games}%"></i></div>
       <div class="hint" style="margin:0"><span class="dot" style="background:var(--p1)"></span>Bot 1: ${STYLES[s.p1]} &nbsp;
         <span class="dot" style="background:var(--p2)"></span>Bot 2: ${STYLES[s.p2]} &nbsp;·&nbsp;
@@ -407,6 +409,7 @@ async function openGame(n, move = 1) {
     <div class="dhead"><h3>Game ${n} — ${w ? `<span style="color:var(--p${w})">Bot ${w}</span> won` : 'a tie'}
       <span class="tag" style="background:${how.color};font:12px system-ui;vertical-align:2px">${how.label}</span>
       ${game.p1_vp == null ? '' : `<span style="color:var(--muted);font:14px system-ui"> ${game.p1_vp} – ${game.p2_vp}</span>`}</h3>
+      <a href="/table#${run.id}/${n}" style="color:var(--accent);text-decoration:none">View at the table</a>
       <button id="closeBtn">Close</button></div>
     <div class="dbody">
       <div id="timeline"></div>

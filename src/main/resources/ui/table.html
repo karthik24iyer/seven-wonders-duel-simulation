@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>7 Wonders Duel — Table</title>
+<style>
+  :root {
+    --felt: #f3eee6; --felt-2: #ebe3d6; --panel: #fffcf7; --ink: #3d3a44; --muted: #8a8492; --line: #e3dbcd;
+    --p1: #f0a37a; --p1-ink: #b8643a; --p2: #8fbcdc; --p2-ink: #3f7aa3;
+    --BROWN: #dcc0a3; --GRAY: #d6d9df; --GOLD: #f5e1a0; --RED: #f3b7b0; --BLUE: #bad2ef; --GREEN: #bfe2c5;
+    --PURPLE: #d9c7ee; --WONDER: #efe3cf; --PROGRESS_TOKEN: #bde6da;
+    --BROWN-s: #b58c66; --GRAY-s: #9aa0aa; --GOLD-s: #d9b64f; --RED-s: #d98178; --BLUE-s: #7ea6d8; --GREEN-s: #7fbf8b;
+    --PURPLE-s: #a98bd0; --WONDER-s: #c7b08c; --PROGRESS_TOKEN-s: #6fbfa9;
+    --age1: #e9cfae; --age2: #c4d9f0; --age3: #dac9ef;
+    --cw: 66px; --ch: 92px;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; min-height: 100vh; background: radial-gradient(ellipse at 50% 40%, var(--felt) 0%, var(--felt-2) 100%);
+         color: var(--ink); font: 13px/1.35 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  button, select { font: inherit; color: inherit; }
+
+  header { display: flex; align-items: center; gap: 10px; padding: 10px 18px; background: var(--panel);
+           border-bottom: 1px solid var(--line); flex-wrap: wrap; position: sticky; top: 0; z-index: 5; }
+  header h1 { margin: 0 8px 0 0; font: 600 17px Georgia, serif; }
+  header a { color: var(--muted); text-decoration: none; }
+  header a:hover { color: var(--ink); }
+  .grow { flex: 1; }
+  .ctl { display: flex; gap: 4px; align-items: center; }
+  .pill-btn { color: inherit; text-decoration: none; }
+  .ctl button, .pill-btn { background: var(--felt); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+  .ctl button:hover, .pill-btn:hover { background: var(--felt-2); }
+  .ctl select { background: var(--felt); border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; }
+  .badge { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 99px; letter-spacing: .4px; text-transform: uppercase; }
+  .badge.live { background: #f6c6c1; color: #9b3c33; }
+  .badge.live::before { content: "● "; animation: blink 1.2s infinite; }
+  .badge.replay { background: var(--felt-2); color: var(--muted); }
+  @keyframes blink { 50% { opacity: .25; } }
+  #where { color: var(--muted); min-width: 140px; }
+
+  main { padding: 10px 16px; max-width: 1560px; margin: 0 auto; }
+  /* fills the screen; a late-game city with tall stacks makes the page grow and scroll a little rather than squash the pyramid */
+  #table { display: grid; gap: 10px; min-height: calc(100vh - 72px); grid-template-rows: auto minmax(400px, 1fr) auto; }
+
+  /* ---- a player's side of the table ---- */
+  .side { background: color-mix(in srgb, var(--panel) 70%, transparent); border-radius: 16px; padding: 8px 14px; --cw: 62px; --ch: 93px;
+          display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: start; border: 2px solid transparent;
+          transition: border-color .3s, box-shadow .3s; }
+  .side.turn { border-color: var(--pc); box-shadow: 0 0 0 4px color-mix(in srgb, var(--pc) 25%, transparent); }
+  .side.p1 { --pc: var(--p1); --pc-ink: var(--p1-ink); }
+  .side.p2 { --pc: var(--p2); --pc-ink: var(--p2-ink); }
+  .who { font: 600 15px Georgia, serif; color: var(--pc-ink); display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .who small { font: 12px system-ui; color: var(--muted); }
+  .wonders { display: grid; grid-template-columns: repeat(4, 136px); gap: 8px 20px; }
+  .city { display: flex; gap: 6px; align-items: flex-start; min-height: var(--ch); }
+  .col { display: flex; flex-direction: column; width: var(--cw); }
+  .col .card + .card { margin-top: calc(var(--ch) * -1 + var(--peek, 22px)); }
+  .col.empty { width: 22px; }
+  .purse { display: grid; gap: 8px; justify-items: center; min-width: 150px; }
+  .coin { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; font: 700 18px Georgia, serif;
+          background: radial-gradient(circle at 35% 30%, #fff6d0, #f2d67c 60%, #dcb655); color: #7a5b12;
+          box-shadow: inset 0 -3px 0 rgba(0,0,0,.08), 0 2px 4px rgba(0,0,0,.08); transition: transform .3s; }
+  .coin.bump { transform: scale(1.18); }
+  .score { display: flex; gap: 10px; color: var(--muted); font-size: 12px; }
+  .score b { color: var(--ink); font-size: 14px; }
+  .tokens { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; max-width: 200px; }
+  .stance { font-size: 11.5px; color: var(--pc-ink); background: color-mix(in srgb, var(--pc) 18%, var(--panel));
+            padding: 3px 9px; border-radius: 99px; max-width: 220px; text-align: center; }
+
+  /* ---- cards ---- */
+  .card { width: var(--cw); height: var(--ch); border-radius: calc(var(--cw) * .085); position: relative; overflow: hidden; flex: none;
+          box-shadow: 0 1px 2px rgba(40,30,20,.3), 0 0 0 1px rgba(40,30,20,.12); transition: transform .25s, box-shadow .25s, filter .3s; }
+  .card svg, .wonder > svg { width: 100%; height: 100%; display: block; }
+  .card.dim { filter: saturate(.8) brightness(.9); } /* not opacity: overlapping cards must stay solid */
+  .card.free { transform: translateY(-3px); box-shadow: 0 7px 14px rgba(40,30,20,.28), 0 0 0 1px rgba(40,30,20,.14); }
+  .card.picked { transform: translateY(-10px) scale(1.08); z-index: 30 !important; box-shadow: 0 0 0 3px var(--pick), 0 14px 26px rgba(0,0,0,.3) !important; }
+  .card.new { animation: arrive .9s ease-out; box-shadow: 0 0 0 3px var(--pc), 0 4px 10px rgba(0,0,0,.2); }
+  @keyframes arrive { from { transform: translateY(var(--from, -30px)) scale(1.15); opacity: .2; } }
+
+  .wonders { position: relative; z-index: 0; } /* so tucked cards can sit behind their wonder but above the panel */
+  .wonder { width: 136px; height: 85px; border-radius: 8px; position: relative; box-shadow: 0 1px 3px rgba(40,30,20,.3), 0 0 0 1px rgba(40,30,20,.12);
+            transition: transform .25s, box-shadow .25s, filter .3s; }
+  .wonder > svg { border-radius: 8px; }
+  .wonder.unbuilt { filter: saturate(.35) brightness(1.08); opacity: .62; }
+  .wonder.slot { box-shadow: none; outline: 1.5px dashed #cdbfa8; outline-offset: -1.5px; background: #f7f1e8; }
+  .wonder.new { animation: arrive .9s ease-out; box-shadow: 0 0 0 3px var(--pc); }
+  .wonder.picked { transform: scale(1.06); box-shadow: 0 0 0 3px var(--pick), 0 10px 20px rgba(0,0,0,.25); }
+  /* the Age card used to build a wonder sticks out on its right, as on the real table */
+  .tuck { position: absolute; right: -15px; top: 9px; bottom: 9px; width: 40px; z-index: -1; border-radius: 6px; background: #231d1b; padding: 3px 3px 3px 0; }
+  .tuck i { display: block; height: 100%; border-radius: 4px; background: var(--tint); }
+  .tuck b { position: absolute; right: -4px; top: 50%; transform: translateY(-50%); width: 11px; height: 18px; border-radius: 6px; background: #231d1b;
+            color: #f3ecde; font: 700 7px Georgia, serif; display: grid; place-items: center; writing-mode: vertical-rl; }
+  .draft .wonder { width: 190px; height: 119px; }
+  .token { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; text-align: center; letter-spacing: -.2px;
+           background: radial-gradient(circle at 35% 30%, #e6f7f1, var(--PROGRESS_TOKEN) 70%); color: #2f6d5c;
+           font: 600 7px system-ui; line-height: 1.05; box-shadow: 0 1px 3px rgba(0,0,0,.14), inset 0 0 0 2px #fff8; padding: 3px; }
+  .token.new { animation: arrive .9s ease-out; box-shadow: 0 0 0 3px var(--pc); }
+  .token.picked { transform: scale(1.2); box-shadow: 0 0 0 3px var(--pick); }
+
+  /* ---- centre of the table ---- */
+  .centre { display: grid; grid-template-columns: 172px 1fr 290px; gap: 14px; align-items: stretch; min-height: 0; }
+  .centre > * { contain: size; } /* the row's height comes from the screen, never from the move log or the pyramid */
+  .board { background: linear-gradient(180deg, #e7d7f1 0%, #f7eadb 50%, #f7d9d0 100%); border-radius: 18px; padding: 10px 8px;
+           box-shadow: 0 2px 6px rgba(60,50,40,.12); display: grid; grid-template-columns: 1fr 44px 1fr; grid-template-rows: auto minmax(0, 1fr) auto; gap: 4px; align-items: stretch; }
+  .board .label { grid-column: 1 / -1; text-align: center; font-size: 10.5px; font-weight: 600; letter-spacing: .3px; }
+  .track { display: grid; grid-template-rows: repeat(19, 1fr); gap: 2px; min-height: 0; }
+  .space { border-radius: 5px; background: #fffaf3aa; position: relative; box-shadow: inset 0 0 0 1px #0000000f; }
+  .space.z1 { background: #fffaf3; } .space.z2 { background: #f7efe4; } .space.z3 { background: #efe3d4; }
+  .space.cap1 { background: var(--p1); } .space.cap2 { background: var(--p2); }
+  .space.mid { background: #fff; box-shadow: inset 0 0 0 2px #e8c9c4; }
+  .pawn { position: absolute; inset: -3px 4px; border-radius: 50% 50% 45% 45%; background: radial-gradient(circle at 40% 30%, #ffb3a8, #e0685c);
+          box-shadow: 0 2px 4px rgba(0,0,0,.25); z-index: 2; }
+  .lootcol, .tokcol { display: grid; grid-template-rows: repeat(19, 1fr); gap: 2px; justify-items: center; }
+  .loot { align-self: center; font: 700 10px system-ui; padding: 2px 6px; border-radius: 6px; background: #f3b7b0; color: #8f3a31;
+          box-shadow: 0 1px 2px rgba(0,0,0,.12); transition: opacity .4s, transform .4s; }
+  .loot.gone { opacity: 0; transform: scale(.5); }
+  .tokcol .token { width: 46px; height: 46px; font-size: 6.8px; }
+  .tokcol .token.at { grid-row: span 3; align-self: center; }
+
+  .pyramid-wrap { background: color-mix(in srgb, var(--panel) 45%, transparent); border-radius: 18px; display: grid; place-items: center;
+                  position: relative; min-height: 0; overflow: hidden; padding: 16px; }
+  .pyramid, .draft { transform-origin: center; }
+  .age { position: absolute; top: 10px; left: 14px; font: 600 14px Georgia, serif; color: var(--muted); }
+  .discard { position: absolute; top: 10px; right: 14px; display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 11.5px; }
+  .discard .card { --cw: 34px; --ch: 51px; }
+  .discard b { font: 700 13px Georgia, serif; color: var(--ink); }
+  .pyramid { position: relative; }
+  .pyramid { --cw: 84px; --ch: 126px; }
+  .pyramid .card { position: absolute; }
+  .draft { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .draft h3 { width: 100%; text-align: center; margin: 0 0 6px; font: 600 14px Georgia, serif; color: var(--muted); }
+
+  .commentary { background: var(--panel); border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px;
+                box-shadow: 0 1px 3px rgba(60,50,40,.08); min-width: 0; min-height: 0; overflow: hidden; }
+  .commentary h2 { margin: 0; font: 600 11px system-ui; letter-spacing: .6px; text-transform: uppercase; color: var(--muted); }
+  #caption { font: 600 15px Georgia, serif; min-height: 42px; }
+  #caption .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  .opts { display: grid; gap: 3px; }
+  .opt { display: grid; grid-template-columns: 1fr 60px 32px; gap: 6px; align-items: center; font-size: 11px; color: var(--muted); }
+  .opt.chosen { color: var(--ink); font-weight: 600; }
+  .opt span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .opt i { height: 6px; background: var(--felt-2); border-radius: 99px; overflow: hidden; display: block; }
+  .opt i b { display: block; height: 100%; border-radius: 99px; }
+  #log { list-style: none; margin: 0; padding: 0; font-size: 11.5px; color: var(--muted); overflow: auto; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 2px; }
+  #log li b { font-weight: 600; }
+
+  .banner { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(243,238,230,.6); backdrop-filter: blur(2px); z-index: 10; }
+  .banner > div { background: var(--panel); border-radius: 20px; padding: 26px 34px; text-align: center; box-shadow: 0 20px 50px rgba(60,50,40,.2); max-width: 440px; }
+  .banner h2 { margin: 0 0 6px; font: 600 26px Georgia, serif; }
+  .banner p { color: var(--muted); margin: 0 0 16px; }
+  .banner .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+  .launcher { max-width: 520px; margin: 40px auto; background: var(--panel); border-radius: 20px; padding: 24px 28px; box-shadow: 0 10px 30px rgba(60,50,40,.1); }
+  .launcher h2 { margin: 0 0 4px; font: 600 22px Georgia, serif; }
+  .launcher p { color: var(--muted); margin: 0 0 16px; }
+  .launcher label { display: block; font-weight: 600; margin: 12px 0 4px; }
+  .launcher select, .launcher input { width: 100%; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--felt); font: inherit; }
+  .launcher .go { margin-top: 18px; width: 100%; padding: 11px; border: 0; border-radius: 10px; background: #e7a27c; color: #fff; font: 600 15px system-ui; cursor: pointer; }
+  .launcher .go:hover { background: #db8f66; }
+  .launcher .err { color: #b8483e; margin-top: 10px; }
+  .launcher .or { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .launcher .or a { display: inline-block; margin: 4px 6px 0 0; }
+
+  @media (max-width: 1100px) { .centre { grid-template-columns: 160px 1fr; } .commentary { grid-column: 1 / -1; height: 260px; } .side { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>7 Wonders Duel</h1>
+  <span id="badge"></span>
+  <span id="title" style="color:var(--muted)"></span>
+  <span class="grow"></span>
+  <div class="ctl" id="controls" hidden>
+    <button id="first" title="Back to the start">⏮</button>
+    <button id="prev" title="Previous move (←)">◀</button>
+    <button id="play" title="Play / pause (space)">⏸</button>
+    <button id="next" title="Next move (→)">▶</button>
+    <button id="live" title="Catch up to the newest move">Catch up ⏭</button>
+    <select id="speed" title="Seconds per move">
+      <option value="2.5">Slow</option><option value="1.3" selected>Normal</option><option value="0.6">Fast</option><option value="0">Instant</option>
+    </select>
+    <span id="where"></span>
+  </div>
+  <a href="/" title="Statistics and batch runs">← Arena</a>
+</header>
+<main id="main"></main>
+
+<script src="/cards.js"></script>
+<script>
+const STYLES = { MCTS: 'Balanced', MCTS_Opportunist: 'Opportunist', MCTS_Civilian: 'Builder', MCTS_Science: 'Scientist', MCTS_Military: 'Warlord', Random: 'Random' };
+const COLS = ['BROWN', 'GRAY', 'GOLD', 'RED', 'BLUE', 'GREEN', 'PURPLE'];
+const SCI = { ARMILLARY_SPHERE: '◎', WEIGHING_SCALE: '⚖︎', SUNDIAL: '◴', MORTAR_AND_PESTEL: '⚗︎', QUILL_AND_INKPEN: '✒︎', WHEEL: '☸︎', INCLINOMETER: '⟁' };
+const RES = { WOOD: 'W', CLAY: 'C', STONE: 'S', GLASS: 'G', PAPER: 'P' };
+const PHASE = { WONDERS_SELECTION: 'Wonder draft', FIRST_AGE: 'Age I', SECOND_AGE: 'Age II', THIRD_AGE: 'Age III',
+                MILITARY_SUPREMACY: 'Military supremacy', SCIENCE_SUPREMACY: 'Scientific supremacy', CIVILIAN_VICTORY: 'Civilian victory' };
+const AGE_OF = { WONDERS_SELECTION: 1, FIRST_AGE: 1, SECOND_AGE: 2, THIRD_AGE: 3 };
+const WONDER_TEXT = {
+  'The Appian Way': 'Take 3 coins, opponent loses 3 · play again', 'Circus Maximus': 'Destroy an opponent grey card · 1 shield',
+  'The Colossus': '2 shields', 'The Great Library': 'Pick 1 of 3 unused progress tokens', 'The Great Lighthouse': 'Makes wood, clay or stone',
+  'The Hanging Gardens': 'Take 6 coins · play again', 'The Mausoleum': 'Build a discarded card for free', 'Piraeus': 'Makes glass or papyrus · play again',
+  'The Pyramids': '9 points', 'The Sphinx': 'Play again', 'The Statue of Zeus': 'Destroy an opponent brown card · 1 shield',
+  'The Temple of Artemis': 'Take 12 coins · play again' };
+const TOKEN_TEXT = {
+  Agriculture: '+6 coins, 4 points', Architecture: 'Wonders cost 2 fewer resources', Economy: 'Collect what the opponent pays for trading',
+  Law: 'Counts as a science symbol', Masonry: 'Blue cards cost 2 fewer resources', Mathematics: '3 points per progress token',
+  Philosophy: '7 points', Strategy: '+1 shield on new red cards', Theology: 'Future wonders play again', Urbanism: '+6 coins, +4 per chain build' };
+
+// Slot positions for each Age layout, [x in half-card widths, row from the top], indexed like CardStructureFactory
+const LAYOUT = {
+  1: (() => { const p = []; for (let r = 0; r < 5; r++) for (let k = 0; k < 6 - r; k++) p.push([r + 2 * k, 4 - r]); return p; })(),
+  2: (() => { const p = []; for (let r = 0; r < 5; r++) for (let k = 0; k < 2 + r; k++) p.push([4 - r + 2 * k, 4 - r]); return p; })(),
+  3: [[2,6],[4,6],[1,5],[3,5],[5,5],[0,4],[2,4],[4,4],[6,4],[1,3],[5,3],[0,2],[2,2],[4,2],[6,2],[1,1],[3,1],[5,1],[2,0],[4,0]],
+};
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const api = async (path, body) => {
+  const res = await fetch('/api/' + path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const json = await res.json();
+  if (!res.ok) throw Object.assign(new Error(json.error || res.statusText), { status: res.status });
+  return json;
+};
+
+let CARDS = {};
+let run = null, gameN = 0, steps = [], finished = false, failed = false;
+let cursor = 0, playing = true, pending = null, timer = null, pollTimer = null, startAt = null;
+
+/* ------------------------------------------------------------ cards ---- */
+const TINT = { 1: 'linear-gradient(#cf7a42, #b25f2c)', 2: 'linear-gradient(#3aa6d6, #1f86b6)', 3: 'linear-gradient(#a98bc6, #8a6cae)' };
+function cardHtml(name, cls = '', style = '') {
+  const c = CARDS[name] || { color: 'WONDER' };
+  const tip = `${name}${c.vp ? ` · ${c.vp} points` : ''}${c.shields ? ` · ${c.shields} shield${c.shields > 1 ? 's' : ''}` : ''}`;
+  return `<div class="card ${cls}" style="${style}" title="${esc(tip)}">${CardArt.card(name, c)}</div>`;
+}
+const backHtml = (age, cls = '', style = '') => `<div class="card back ${cls}" style="${style}" title="Face down">${CardArt.back(age || 1)}</div>`;
+function wonderHtml(name, cls = '', builtAge = 0) {
+  return `<div class="wonder ${cls}" title="${esc(name)}: ${esc(WONDER_TEXT[name] || '')}">${CardArt.wonder(name, CARDS[name] || {})}${builtAge
+    ? `<div class="tuck" style="--tint:${TINT[builtAge]}"><i></i><b>${['', 'I', 'II', 'III'][builtAge]}</b></div>` : ''}</div>`;
+}
+const tokenHtml = (name, cls = '') => `<div class="token ${cls}" title="${esc(name)}: ${esc(TOKEN_TEXT[name] || '')}">${esc(name)}</div>`;
+
+/* ----------------------------------------------------- what a move is ---- */
+function parse(step) {
+  const a = step.action || '', m = [
+    [/^Build wonder (.+)$/, 'wonder', 'builds the wonder'], [/^Build burned card (.+)$/, 'discardBuild', 'builds from the discard pile'],
+    [/^Build (.+)$/, 'build', 'builds'], [/^Burn (.+) for coins$/, 'sell', 'discards for coins'],
+    [/^Burn (.+) to build wonder$/, 'tuck', 'uses a card to start a wonder:'], [/^Burn opponent card (.+)$/, 'destroy', 'destroys the opponent\'s'],
+    [/^Choose progress token (.+)$/, 'token', 'takes the progress token'], [/^Choose unused progress token (.+)$/, 'libtoken', 'takes the progress token'],
+    [/^Choose (.+) as starting wonder$/, 'draft', 'drafts'], [/^Choose (PLAYER_\d) as next player$/, 'next', 'decides who starts the Age:'],
+  ].find(([re]) => re.test(a));
+  if (!m) return { kind: 'other', name: '', verb: a };
+  return { kind: m[1], name: a.match(m[0])[1], verb: m[2] };
+}
+function describe(step) {
+  const p = parse(step);
+  if (p.kind === 'next') return `decides <b>Bot ${p.name.slice(-1)}</b> starts the next Age`;
+  if (p.kind === 'other') return esc(p.verb);
+  return `${p.verb} <b>${esc(p.name)}</b>`;
+}
+
+/* ------------------------------------------------------------ render ---- */
+function render() {
+  const step = steps[cursor], prev = steps[cursor - 1], t = step.table, age = AGE_OF[step.phase];
+  const next = pending !== null ? steps[pending] : null, picked = next ? parse(next) : null;
+  const pickColor = next ? `var(--p${next.player})` : '';
+  const isPicked = name => picked && name === picked.name && ['build', 'sell', 'tuck', 'draft', 'token', 'libtoken'].includes(picked.kind);
+  const turn = next ? next.player : (steps[cursor + 1] ? steps[cursor + 1].player : 0);
+
+  // centre: the draft, or the Age's card layout
+  let centre;
+  if (step.phase === 'WONDERS_SELECTION' && t.draft.length) {
+    centre = `<div class="draft"><h3>Wonder draft — pick in turn</h3>${t.draft.map(w => wonderHtml(w, isPicked(w) ? 'picked' : '')).join('')}</div>`;
+  } else if (t.structure) {
+    const lay = LAYOUT[age] || LAYOUT[1], cw = 84, ch = 126, dy = ch * .44, w = (Math.max(...lay.map(p => p[0])) + 2) * cw / 2 + 4; // rows overlap so each covered card shows its top band, as on the table
+    const h = Math.max(...lay.map(p => p[1])) * dy + ch + 12;
+    centre = `<div class="pyramid" style="width:${w}px;height:${h}px">${t.structure.map((name, i) => {
+      if (name === null) return '';
+      const [x, y] = lay[i], free = t.accessible.includes(i);
+      const style = `left:${x * cw / 2}px;top:${y * dy + 8}px;z-index:${y + 1};--bk:var(--age${age});--pick:${pickColor}`;
+      if (name === '?') return backHtml(age, '', style);
+      return cardHtml(name, (isPicked(name) ? 'picked ' : '') + (free ? 'free' : 'dim'), style);
+    }).join('')}</div>`;
+  } else centre = `<div class="draft"><h3>${PHASE[step.phase] || ''}</h3></div>`;
+
+  $('#table').innerHTML = `
+    ${side(2, step, prev, turn, pickColor, isPicked)}
+    <div class="centre">
+      ${board(step, prev, pickColor, isPicked)}
+      <div class="pyramid-wrap"><div class="age">${PHASE[step.phase] || ''}</div>
+        <div class="discard" title="Discard pile">${t.discard ? `${backHtml(age)}<b>${t.discard}</b> discarded` : ''}</div>
+        ${centre}</div>
+      <div class="commentary"><h2>${next ? 'Now' : 'Last move'}</h2><div id="caption"></div><div class="opts" id="opts"></div>
+        <h2>Moves</h2><ol id="log"></ol></div>
+    </div>
+    ${side(1, step, prev, turn, pickColor, isPicked)}`;
+  commentary(next || step, !!next);
+  const wrap = $('.pyramid-wrap'), inner = wrap.querySelector('.pyramid, .draft');
+  if (inner) inner.style.transform = `scale(${Math.min(1.15, (wrap.clientHeight - 44) / inner.offsetHeight, (wrap.clientWidth - 24) / inner.offsetWidth)})`;
+  $('#where').textContent = `move ${cursor} of ${steps.length - 1}${finished ? '' : '…'}`;
+  $('#play').textContent = playing ? '⏸' : '▶';
+  const behind = steps.length - 1 - cursor;
+  $('#live').hidden = finished || behind < 3;
+  $('#live').textContent = `Catch up ${behind} ⏭`;
+  if (cursor === steps.length - 1 && finished && !next) result();
+}
+
+function side(p, step, prev, turn, pickColor, isPicked) {
+  const c = step['p' + p], before = prev ? prev['p' + p] : null, isNew = (list, n) => before && !before[list].includes(n);
+  const from = p === 1 ? '-60px' : '60px';
+  const tallest = Math.max(1, ...COLS.map(col => c.buildings.filter(b => (CARDS[b] || {}).color === col).length));
+  const peek = Math.max(14, Math.min(22, Math.floor(80 / Math.max(1, tallest - 1)))); // enough to show each card's top band
+  const cols = COLS.map(col => {
+    const cards = c.buildings.filter(b => (CARDS[b] || {}).color === col);
+    if (!cards.length) return `<div class="col empty"></div>`;
+    return `<div class="col">${cards.map(b => cardHtml(b, isNew('buildings', b) ? 'new' : '', `--from:${from}`)).join('')}</div>`;
+  }).join('');
+  const builtIn = w => AGE_OF[(steps.find(s => s['p' + p].wonders.includes(w)) || step).phase] || 1;
+  const wonders = [...c.wonders.map(w => wonderHtml(w, 'built' + (isNew('wonders', w) ? ' new' : ''), builtIn(w))),
+                   ...c.unbuilt.map(w => wonderHtml(w, 'unbuilt' + (isNew('unbuilt', w) ? ' new' : '')))];
+  while (wonders.length < 4 && step.phase === 'WONDERS_SELECTION') wonders.push('<div class="wonder slot"></div>');
+  const coinsChanged = before && before.coins !== c.coins;
+  const name = (run && run.settings['p' + p]) || '';
+  const note = [...steps.slice(0, cursor + 1)].reverse().find(s => s.player === p && s.note);
+  return `<section class="side p${p} ${turn === p ? 'turn' : ''}" style="--age:var(--age${AGE_OF[step.phase] || 1})">
+    <div><div class="who">Bot ${p} <small>${esc(STYLES[name] || name)}${p === 1 ? ' · moves first' : ''}</small></div>
+      <div class="wonders">${wonders.join('')}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:5px">${c.wonders.length} built${c.unbuilt.length ? ` · ${c.unbuilt.length} still to build (faded)` : ''}</div></div>
+    <div><div class="who" style="visibility:hidden">·</div><div class="city" style="--peek:${peek}px">${cols}</div></div>
+    <div class="purse">
+      <div class="coin ${coinsChanged ? 'bump' : ''}" title="Coins">${c.coins}</div>
+      <div class="score"><span><b>${c.vp ?? '–'}</b> pts</span><span><b>${c.science}</b>/6 science</span></div>
+      <div class="tokens">${c.tokens.map(tk => tokenHtml(tk, isNew('tokens', tk) ? 'new' : '')).join('')}</div>
+      ${note ? `<div class="stance">${esc(note.note.replace('Stance: ', ''))}</div>` : ''}
+    </div></section>`;
+}
+
+function board(step, prev, pickColor, isPicked) {
+  const pawn = Math.max(-9, Math.min(9, step.pawn)), t = step.table, [l1a, l1b, l2a, l2b] = t.looting;
+  // Bot 2's capital at the top, Bot 1's at the bottom; the pawn moves toward the capital of whoever is losing
+  const pos = i => 9 - i; // row i (0 = top) holds pawn position +9 .. -9
+  const spaces = Array.from({ length: 19 }, (_, i) => {
+    const v = pos(i), a = Math.abs(v), cls = v === 9 ? 'cap2' : v === -9 ? 'cap1' : v === 0 ? 'mid' : a >= 6 ? 'z3' : a >= 3 ? 'z2' : 'z1';
+    return `<div class="space ${cls}">${v === pawn ? '<div class="pawn" title="Conflict pawn"></div>' : ''}</div>`;
+  }).join('');
+  const loot = Array.from({ length: 19 }, (_, i) => {
+    const v = pos(i), tok = { 6: [l1b, 5], 3: [l1a, 2], '-3': [l2a, 2], '-6': [l2b, 5] }[v];
+    return `<div>${tok ? `<span class="loot ${tok[0] ? '' : 'gone'}" title="${v > 0 ? 'Bot 2' : 'Bot 1'} loses ${tok[1]} coins when the pawn gets here">−${tok[1]}</span>` : ''}</div>`;
+  }).join('');
+  const tokens = t.tokens.map((tk, i) => `<div style="grid-row:${2 + i * 3} / span 3;align-self:center">${tokenHtml(tk, isPicked(tk) ? 'picked' : '')}</div>`).join('');
+  return `<div class="board" style="--pick:${pickColor}"><div class="label" style="color:var(--p2-ink)">Bot 2's capital</div>
+    <div class="tokcol">${tokens}</div><div class="track">${spaces}</div><div class="lootcol">${loot}</div>
+    <div class="label" style="color:var(--p1-ink)">Bot 1's capital</div></div>`;
+}
+
+function commentary(step, upcoming) {
+  $('#caption').innerHTML = step.player
+    ? `<span class="dot" style="background:var(--p${step.player})"></span>Bot ${step.player} ${describe(step)}${step.options === 1 ? ' <span style="color:var(--muted);font:12px system-ui">(only option)</span>' : ''}`
+    : 'The table is set.';
+  if (step.values) {
+    const opts = Object.entries(step.values).sort((a, b) => b[1] - a[1]), top = Math.max(...opts.map(o => o[1]), 1e-9);
+    $('#opts').innerHTML = `<div style="color:var(--muted);font-size:11px">It weighed ${opts.length} moves — how often each won in its head:</div>` +
+      opts.slice(0, 5).map(([a, v]) => `<div class="opt ${a === step.action ? 'chosen' : ''}"><span title="${esc(a)}">${esc(a)}</span>
+        <i><b style="width:${v / top * 100}%;background:var(--p${step.player});opacity:${a === step.action ? 1 : .45}"></b></i><span>${Math.round(v * 100)}%</span></div>`).join('');
+  } else $('#opts').innerHTML = '';
+  const shown = steps.slice(1, cursor + 1).map((s, i) => ({ s, i: i + 1 })).filter(x => x.s.options !== 1).slice(-40).reverse();
+  $('#log').innerHTML = shown.map(({ s, i }) => `<li><span style="color:var(--p${s.player}-ink)">●</span> ${i}. ${describe(s)}</li>`).join('');
+}
+
+function result() {
+  if ($('.banner') || !steps.length) return;
+  const last = steps[steps.length - 1], p1 = last.p1.vp, p2 = last.p2.vp, phase = last.phase;
+  let who = 0;
+  if (phase === 'MILITARY_SUPREMACY') who = last.pawn > 0 ? 1 : 2;
+  else if (phase === 'SCIENCE_SUPREMACY') who = last.p1.science >= 6 ? 1 : 2;
+  else if (p1 !== p2) who = p1 > p2 ? 1 : 2;
+  const div = document.createElement('div');
+  div.className = 'banner';
+  div.innerHTML = `<div><h2 style="color:${who ? `var(--p${who}-ink)` : 'inherit'}">${failed ? 'The game crashed' : who ? `Bot ${who} wins` : 'A tie on points'}</h2>
+    <p>${failed ? 'See the game log for details.' : PHASE[phase] + (p1 != null ? ` · ${p1} – ${p2}` : '')}</p>
+    <div class="row"><button class="pill-btn" id="again">Deal another game</button><button class="pill-btn" id="stay">Look at the table</button>
+    <a class="pill-btn" href="/#${run.id}/${gameN}" style="text-decoration:none">Open the replay</a></div></div>`;
+  document.body.append(div);
+  $('#stay').onclick = () => div.remove();
+  $('#again').onclick = () => { div.remove(); location.hash = ''; };
+}
+
+/* ---------------------------------------------------------- playback ---- */
+const interval = () => +$('#speed').value * 1000;
+function schedule() {
+  if (pending !== null) return; // mid-move: its own timer applies it, then calls schedule again
+  clearTimeout(timer);
+  if (!playing || cursor >= steps.length - 1) return;
+  timer = setTimeout(advance, cursor === 0 ? 600 : interval());
+}
+function advance() {
+  if (cursor >= steps.length - 1) return;
+  const next = steps[cursor + 1];
+  // Moves the table doesn't need to dwell on (forced ones, or instant speed) apply straight away
+  if (interval() === 0 || next.options === 1 || next.player === 0) { cursor++; render(); return schedule(); }
+  pending = cursor + 1; render();            // show the card being picked up...
+  timer = setTimeout(() => { pending = null; cursor++; render(); schedule(); }, Math.min(900, interval() * .55)); // ...then where it went
+}
+function seek(i) { clearTimeout(timer); pending = null; cursor = Math.max(0, Math.min(steps.length - 1, i)); render(); schedule(); }
+
+$('#play').onclick = () => { playing = !playing; if (playing && cursor >= steps.length - 1) cursor = cursor; render(); schedule(); };
+$('#prev').onclick = () => { playing = false; seek(cursor - 1); };
+$('#next').onclick = () => { playing = false; seek(cursor + 1); };
+$('#first').onclick = () => { playing = false; seek(0); };
+$('#live').onclick = () => { playing = true; seek(steps.length - 1); };
+$('#speed').onchange = () => { try { localStorage.setItem('swd-speed', $('#speed').value); } catch (e) {} schedule(); };
+try { const s = localStorage.getItem('swd-speed'); if (s !== null) $('#speed').value = s; } catch (e) {}
+document.addEventListener('keydown', e => {
+  if (!steps.length || e.target.tagName === 'SELECT') return;
+  if (e.key === ' ') { e.preventDefault(); $('#play').click(); }
+  if (e.key === 'ArrowLeft') $('#prev').click();
+  if (e.key === 'ArrowRight') $('#next').click();
+});
+
+async function poll() {
+  clearTimeout(pollTimer);
+  try {
+    const data = await api(`runs/${run.id}/games/${gameN}/live?from=${steps.length}`);
+    const wasAtEnd = cursor >= steps.length - 1;
+    steps.push(...data.steps); finished = data.finished; failed = data.failed;
+    if (steps.length && !$('#table')) {
+      $('#main').innerHTML = '<div id="table" style="display:grid;gap:12px"></div>'; $('#controls').hidden = false;
+      if (startAt !== null) { cursor = Math.min(startAt, steps.length - 1); playing = false; } // #run/game/move opens paused there
+      render();
+    }
+    else if (data.steps.length || finished) render();
+    if (wasAtEnd || data.steps.length) schedule();
+    badge();
+  } catch (err) {
+    if (err.status === 404 && /not started/.test(err.message)) { $('#main').innerHTML = waiting('Dealing the cards…'); }
+    else { $('#main').innerHTML = waiting(esc(err.message), true); return; }
+  }
+  if (!finished) pollTimer = setTimeout(poll, 1000);
+}
+function badge() {
+  $('#badge').innerHTML = finished ? '<span class="badge replay">Replay</span>' : '<span class="badge live">Live</span>';
+  const s = run.settings;
+  $('#title').textContent = `Game ${gameN} · ${STYLES[s.p1] || s.p1} vs ${STYLES[s.p2] || s.p2} · ${s.playouts ? s.playouts.toLocaleString() + ' imagined games per move' : ''}`;
+}
+const waiting = (msg, bad) => `<div class="launcher" style="text-align:center"><h2>${bad ? 'Can’t show this game' : msg}</h2>${bad ? `<p>${msg}</p><a href="#" class="pill-btn" style="text-decoration:none">Back</a>` : ''}</div>`;
+
+/* ----------------------------------------------------------- launcher ---- */
+async function launcher() {
+  $('#controls').hidden = true; $('#badge').innerHTML = ''; $('#title').textContent = '';
+  const info = await api('info');
+  let running = '';
+  if (info.running) {
+    const r = await api('runs/' + info.running);
+    running = `<div class="or"><b>A batch is running</b> — ${r.done} of ${r.settings.games} games done. Watch one being played right now:<br>
+      ${r.running.map(n => `<a class="pill-btn" style="text-decoration:none" href="#${r.id}/${n}">Game ${n}</a>`).join('') || '<span style="color:var(--muted)">between games — try again in a moment</span>'}</div>`;
+  }
+  const opts = Object.entries(STYLES).map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+  $('#main').innerHTML = `<div class="launcher"><h2>Deal a game</h2><p>Pick two bots and watch them play at the table, move by move.</p>
+    <label>Bot 1 (moves first)</label><select id="lp1">${opts}</select>
+    <label>Bot 2</label><select id="lp2">${opts}</select>
+    <label>Wonders</label><select id="lw"><option value="draft">Drafted, as in the rulebook</option><option value="random">Dealt at random</option></select>
+    <label>Thinking per move</label><select id="lpl"><option value="1000">Quick — 1,000 imagined games</option><option value="5000" selected>Standard — 5,000</option><option value="20000">Deep — 20,000 (slow, about 7 min a game)</option></select>
+    <button class="go" id="deal" ${info.running ? 'disabled style="opacity:.5;cursor:default"' : ''}>Deal</button>
+    <div class="err" id="lerr">${info.running ? 'Only one simulation runs at a time; wait for the batch or stop it in the Arena.' : ''}</div>${running}</div>`;
+  $('#lp2').value = 'MCTS_Opportunist';
+  $('#deal').onclick = async () => {
+    try {
+      const { id } = await api('runs', { p1: $('#lp1').value, p2: $('#lp2').value, wonders: $('#lw').value, playouts: +$('#lpl').value, games: 1, parallel: 1 });
+      location.hash = `${id}/1`;
+    } catch (e) { $('#lerr').textContent = e.message; }
+  };
+}
+
+// Every card face in the game, grouped the way the rulebook lists them: #gallery
+function gallery() {
+  $('#controls').hidden = true; $('#badge').innerHTML = ''; $('#title').textContent = 'Card gallery';
+  const groups = [['Age I', 'FIRST_AGE'], ['Age II', 'SECOND_AGE'], ['Age III', 'THIRD_AGE'], ['Guilds', 'GUILDS']];
+  const row = names => `<div style="display:flex;flex-wrap:wrap;gap:12px;--cw:108px;--ch:162px">${names.map(n => cardHtml(n)).join('')}</div>`;
+  $('#main').innerHTML = `<div style="display:grid;gap:18px;padding:8px 0 40px">
+    ${groups.map(([label, g]) => `<h2 style="margin:6px 0 0;font:600 18px Georgia,serif">${label}</h2>${row(Object.keys(CARDS).filter(k => CARDS[k].age === g))}`).join('')}
+    <h2 style="margin:6px 0 0;font:600 18px Georgia,serif">Wonders</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:14px 30px">${Object.keys(CARDS).filter(k => CARDS[k].color === 'WONDER').map((w, i) => `<div style="--pc:var(--p1)">${wonderHtml(w, i % 3 ? '' : 'built', i % 3 ? 0 : 1 + i % 3)}</div>`).join('').replace(/class="wonder /g, 'style="width:230px;height:144px" class="wonder ')}</div>
+    <h2 style="margin:6px 0 0;font:600 18px Georgia,serif">Backs</h2>
+    <div style="display:flex;gap:12px;--cw:108px;--ch:162px">${[1, 2, 3, 'G'].map(a => `<div class="card">${CardArt.back(a)}</div>`).join('')}</div></div>`;
+}
+
+async function route() {
+  clearTimeout(timer); clearTimeout(pollTimer); $('.banner')?.remove();
+  const [id, n, move] = location.hash.slice(1).split('/');
+  if (id === 'gallery') return gallery();
+  if (!id || !n) return launcher();
+  steps = []; cursor = 0; pending = null; finished = false; failed = false; playing = true; gameN = +n; startAt = move ? +move : null;
+  $('#main').innerHTML = waiting('Dealing the cards…');
+  try { run = await api('runs/' + id); } catch (e) { $('#main').innerHTML = waiting(esc(e.message), true); return; }
+  poll();
+}
+window.addEventListener('hashchange', route);
+window.addEventListener('resize', () => steps.length && $('#table') && render());
+CardArt.install();
+api('cards').then(c => { CARDS = c; route(); });
+</script>
+</body>
+</html>

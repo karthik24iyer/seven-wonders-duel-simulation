@@ -77,6 +77,28 @@ class Game(
             if (Math.abs(gameState.militaryBoard.conflictPawnPosition) >= 9) JSONObject.NULL
             else gameState.calculateVictoryPoints(player)
 
+    /** What is on the table besides the two cities: the card pyramid, the board and the wonder draft. */
+    private fun tableJson(gameState: GameState): JSONObject {
+        val graph = gameState.cardStructure?.graph
+        val board = gameState.militaryBoard
+        return JSONObject()
+                // one entry per slot of the Age layout: card name, "?" while face down, null once taken
+                .put("structure", graph?.let { g -> JSONArray(g.vertices.map { v -> when (v) {
+                    null -> JSONObject.NULL
+                    is Card -> v.name
+                    else -> "?"
+                } }.toJavaList()) } ?: JSONObject.NULL)
+                .put("accessible", graph?.let { g -> JSONArray((0 until g.numVertices)
+                        .filter { g.vertices[it] != null && g.getIncomingEdges(it).isEmpty }) } ?: JSONObject.NULL)
+                .put("tokens", JSONArray(gameState.availableProgressTokens.cards.map { it.name }.toJavaList()))
+                .put("looting", JSONArray(listOf(board.token1P1Present, board.token2P1Present, board.token1P2Present, board.token2P2Present)))
+                .put("draft", JSONArray(gameState.wondersForPick.cards.map { it.name }.toJavaList()))
+                .put("discard", gameState.burnedCards.size())
+    }
+
+    /** One line per move, appended as it happens, so a viewer can follow the game live. */
+    private val liveLog = File(logPath, "steps.ndjson")
+
     private fun cityJson(gameState: GameState, player: PlayerTurn): JSONObject {
         val city = gameState.getPlayerCity(player)
         val names = { cards: Iterable<Card> ->
@@ -112,6 +134,11 @@ class Game(
 
     fun mainLoop(startingGameState : GameState, generator : RandomWithTracker) {
         val startedAt = System.currentTimeMillis()
+        liveLog.writeText(JSONObject()
+                .put("player", 0).put("action", "Setup").put("phase", startingGameState.gamePhase.toString())
+                .put("pawn", 0).put("table", tableJson(startingGameState))
+                .put("p1", cityJson(startingGameState, PlayerTurn.PLAYER_1))
+                .put("p2", cityJson(startingGameState, PlayerTurn.PLAYER_2)).toString() + "\n")
 
         try {
             jsonGen.writeStartArray()
@@ -203,7 +230,7 @@ class Game(
         gameState_= action.process(gameState_, generator, logger)
         logger.handlers.forEach { it.flush() }
 
-        steps.put(JSONObject()
+        val step = JSONObject()
                 .put("player", PlayerTurn.getPlayerNumber(thisDecision.player))
                 .put("action", action.toString())
                 .put("options", thisDecision.options.size())
@@ -212,7 +239,9 @@ class Game(
                 .put("phase", gameState_.gamePhase.toString())
                 .put("pawn", gameState_.militaryBoard.conflictPawnPosition)
                 .put("p1", cityJson(gameState_, PlayerTurn.PLAYER_1))
-                .put("p2", cityJson(gameState_, PlayerTurn.PLAYER_2)))
+                .put("p2", cityJson(gameState_, PlayerTurn.PLAYER_2))
+        steps.put(step)
+        liveLog.appendText(JSONObject(step.toString()).put("table", tableJson(gameState_)).toString() + "\n")
 
         jsonGen.write(action.toString())
         gameState_.toJson(jsonGen)

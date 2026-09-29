@@ -1,5 +1,6 @@
 package com.aigamelabs.swduel.ui
 
+import com.aigamelabs.swduel.CardFactory
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import org.json.JSONArray
@@ -83,6 +84,27 @@ object Server {
         when {
             method == "GET" && path.isEmpty() ->
                 exchange.send(200, Server::class.java.getResource("/ui/index.html")!!.readText(), "text/html; charset=utf-8")
+            method == "GET" && path == listOf("cards.js") ->
+                exchange.send(200, Server::class.java.getResource("/ui/cards.js")!!.readText(), "text/javascript; charset=utf-8")
+            method == "GET" && path == listOf("table") ->
+                exchange.send(200, Server::class.java.getResource("/ui/table.html")!!.readText(), "text/html; charset=utf-8")
+            method == "GET" && path == listOf("api", "cards") ->
+                exchange.send(200, cardCatalogue)
+            method == "GET" && path.size == 6 && path[1] == "runs" && path[3] == "games" && path[5] == "live" -> {
+                val n = path[4].toIntOrNull() ?: throw BadRequest(400, "Bad game number")
+                val gameDir = File(runDir(path[2]), "game_$n")
+                val log = File(gameDir, "steps.ndjson")
+                if (!log.exists()) throw BadRequest(404, if (File(gameDir, "summary.json").exists())
+                    "This game was played before the table view existed" else "This game has not started yet")
+                val from = exchange.requestURI.query?.removePrefix("from=")?.toIntOrNull() ?: 0
+                // ponytail: re-reads the whole log each poll; ~80 lines of a few KB, cheap until games get long
+                val lines = log.readLines().filter { it.endsWith("}") } // skip a line still being written
+                exchange.send(200, JSONObject()
+                        .put("steps", JSONArray(lines.drop(from).map { JSONObject(it) }))
+                        .put("finished", File(gameDir, "summary.json").exists() || File(gameDir, "failed").exists())
+                        .put("failed", File(gameDir, "failed").exists())
+                        .toString())
+            }
             method == "GET" && path == listOf("api", "info") ->
                 exchange.send(200, JSONObject().put("cores", cores).put("max_parallel", maxParallel).put("running", current?.id ?: JSONObject.NULL).toString())
             method == "GET" && path == listOf("api", "runs") ->
@@ -103,6 +125,34 @@ object Server {
             }
             else -> throw BadRequest(404, "Not found")
         }
+    }
+
+    /** Everything the table view needs to draw a card; built once from the engine's own card definitions. */
+    private val cardCatalogue: String by lazy {
+        val catalogue = JSONObject()
+        listOf(CardFactory.firstAge, CardFactory.secondAge, CardFactory.thirdAge, CardFactory.guilds,
+                CardFactory.wonders, CardFactory.progressTokens).forEach { deck ->
+            deck.forEach { c ->
+                catalogue.put(c.name, JSONObject()
+                        .put("color", c.color.toString())
+                        .put("age", c.cardGroup.toString())
+                        .put("vp", c.victoryPoints)
+                        .put("shields", c.militaryPoints)
+                        .put("science", c.scienceSymbol.toString())
+                        .put("coins", c.coinsProduced)
+                        .put("coinCost", c.coinCost)
+                        .put("cost", JSONObject(c.resourceCost.toJavaMap()))
+                        .put("produces", JSONObject(c.resourceProduction.toJavaMap()))
+                        .put("chain", c.linkingSymbol.toString())
+                        .put("chainFrom", c.linksTo.toString())
+                        .put("trade", JSONArray(c.tradingBonuses.map { it.toString() }.toJavaList()))
+                        .put("alt", c.resourceAlternativeProduction.toString())
+                        .put("vpFormula", c.victoryPointsFormula.toString())
+                        .put("coinsFormula", c.coinsProducedFormula.toString())
+                        .put("bonuses", JSONArray(c.bonuses.map { it.toString() })))
+            }
+        }
+        catalogue.toString()
     }
 
     private fun HttpExchange.send(code: Int, body: String, type: String = "application/json") {
