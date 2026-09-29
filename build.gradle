@@ -1,125 +1,68 @@
 plugins {
     id 'application'
-    id 'java'
-    id "org.jetbrains.kotlin.jvm" version "1.3.41"
-}
-
-sourceSets {
-    main.kotlin.srcDirs += 'src/main/kotlin'
-    main.kotlin.exclude '**/terraforming/*'
-    test.kotlin.srcDirs += 'src/test/kotlin'
-}
-
-repositories {
-    mavenLocal()
-    maven {
-        url = 'http://repo.maven.apache.org/maven2'
-    }
-}
-
-dependencies {
-    compile 'io.vavr:vavr:0.9.2'
-    compile 'io.vavr:vavr-kotlin:0.9.2'
-    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
-    compile 'org.jetbrains.kotlin:kotlin-reflect:1.3.41'
-    compile 'org.jetbrains.spek:spek-api:1.1.5'
-    compile 'javax.json:javax.json-api:1.1.2'
-    compile 'org.glassfish:javax.json:1.1.2'
-    compile 'org.json:json:20171018'
-    compile 'commons-cli:commons-cli:1.4'
-    testCompile 'org.jetbrains.kotlin:kotlin-test-junit:1.2.51'
-    testCompile 'org.jetbrains.spek:spek-junit-platform-engine:1.1.5'
+    id 'org.jetbrains.kotlin.jvm' version '2.1.21'
 }
 
 group = 'sevenwondersduel'
 version = '0.1-SNAPSHOT'
 description = 'SevenWondersDuel'
-sourceCompatibility = '1.8'
 
-tasks.withType(JavaCompile) {
-    options.encoding = 'UTF-8'
+repositories {
+    mavenCentral()
 }
 
+dependencies {
+    implementation 'io.vavr:vavr:0.9.2'
+    implementation 'io.vavr:vavr-kotlin:0.9.2'
+    implementation 'org.jetbrains.kotlin:kotlin-reflect'
+    implementation 'javax.json:javax.json-api:1.1.2'
+    implementation 'org.glassfish:javax.json:1.1.2'
+    implementation 'org.json:json:20171018'
+    implementation 'commons-cli:commons-cli:1.4'
 
-// Gradle with multiple entry points
-// Credits: https://gist.github.com/itzg/9276597
-
-startScripts.setActions Arrays.asList()
-
-//Fix
-//CreateStartScripts `jar.outputs.files + project.configurations.runtime` adds `lib` to path.
-//Seems hardcoded solution. Need to figure out how they are generated.
-project.libsDirName = 'lib'
-
-jar {
-    manifest {
-        // Make sure the app's jar can be used with a simple -cp
-        attributes 'Class-Path': configurations.runtime.collect { "${it.getName()}" }.join(' ')
-    }
-
-    // This line of code recursively collects and copies all of a project's files
-    // and adds them to the JAR itself. One can extend this task, to skip certain
-    // files or particular types at will
-    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+    testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.2'
+    testImplementation 'org.jetbrains.spek:spek-api:1.1.5'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.2'
+    testRuntimeOnly 'org.jetbrains.spek:spek-junit-platform-engine:1.1.5'
 }
 
-// copy the dependency jars alongside the built jar for development-time running
-jar {
-    doLast {
-        copy {
-            from files(configurations.runtime)
-            into 'build/libs'
-        }
-    }
+test {
+    useJUnitPlatform()
+    testLogging { events 'failed'; exceptionFormat 'full' }
 }
 
-task tictactoeStartScript(type:CreateStartScripts) {
-    applicationName = 'tictactoe'
-    classpath = jar.outputs.files
-    mainClassName = 'com.aigamelabs.tictactoe.Main'
-    outputDir = file('build/bin')
+// Terraforming Mars is half-finished and does not compile
+sourceSets.main.kotlin.exclude '**/terraforming/*'
+
+kotlin {
+    jvmToolchain(21)
+    compilerOptions.suppressWarnings = true
 }
 
-task myfishStartScript(type:CreateStartScripts) {
-    applicationName = 'myfish'
-    classpath = jar.outputs.files
-    mainClassName = 'com.aigamelabs.myfish.Main'
-    outputDir = file('build/bin')
+// `gradle installDist` lays out build/install/sevenwondersduel/{bin,lib} — use that
+// classpath to run batches of games without paying Gradle startup per game.
+application {
+    mainClass = 'com.aigamelabs.swduel.Main'
 }
 
-task swduelStartScript(type:CreateStartScripts) {
-    applicationName = 'swduel'
-    classpath = jar.outputs.files
-    mainClassName = 'com.aigamelabs.swduel.Main'
-    outputDir = file('build/bin')
+// Dev conveniences: gradle swduel --args="-P1 MCTS -P2 Random -L logs/"
+tasks.register('swduel', JavaExec) {
+    mainClass = 'com.aigamelabs.swduel.Main'
+    classpath = sourceSets.main.runtimeClasspath
 }
-
-applicationDistribution.from(tictactoeStartScript) {
-    into 'bin'
+tasks.register('myfish', JavaExec) {
+    mainClass = 'com.aigamelabs.myfish.Main'
+    classpath = sourceSets.main.runtimeClasspath
 }
-applicationDistribution.from(myfishStartScript) {
-    into 'bin'
-}
-applicationDistribution.from(swduelStartScript) {
-    into 'bin'
-}
-
-task(tictactoe, dependsOn: 'classes', type: JavaExec) {
-    main = 'com.aigamelabs.tictactoe.Main'
+tasks.register('tictactoe', JavaExec) {
+    mainClass = 'com.aigamelabs.tictactoe.Main'
     classpath = sourceSets.main.runtimeClasspath
 }
 
-task(myfish, dependsOn: 'classes', type: JavaExec) {
-    main = 'com.aigamelabs.myfish.Main'
+// Web UI for running batches of games: gradle ui, then open http://localhost:8377
+tasks.register('ui', JavaExec) {
+    mainClass = 'com.aigamelabs.swduel.ui.Server'
     classpath = sourceSets.main.runtimeClasspath
-}
-
-task(swduel, dependsOn: 'classes', type: JavaExec) {
-    main = 'com.aigamelabs.swduel.Main'
-    classpath = sourceSets.main.runtimeClasspath
-}
-
-compileKotlin {
-    kotlinOptions.suppressWarnings = true
-    kotlinOptions.jvmTarget = "11" // "1.6", "1.8", "9", "10", "11", "12"
 }

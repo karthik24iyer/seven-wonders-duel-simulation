@@ -40,9 +40,9 @@ abstract class AsciiHexPrinter {
         var result = "  "
         if (str != null) {
             result = if (str.length > length) {
-                str.toUpperCase().substring(0, length)
+                str.uppercase().substring(0, length)
             } else if (str.length < length) {
-                pad(str.toUpperCase(), length - str.length)
+                pad(str.uppercase(), length - str.length)
             } else {
                 str
             }

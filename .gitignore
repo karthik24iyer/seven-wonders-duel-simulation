@@ -1,6 +1,5 @@
 *.iml
 .idea/
-.gradle
-gradle
-gradlew
-gradlew.bat
+.gradle/
+build/
+logs/
