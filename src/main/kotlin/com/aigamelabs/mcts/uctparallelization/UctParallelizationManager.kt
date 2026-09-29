@@ -11,6 +11,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Runs instances of MCTS using UCT parallelization. This consists in running more than one UCT iteration at a time.
@@ -69,11 +70,17 @@ class UctParallelizationManager<T: AbstractGameState<T>>(
         rootNode = TreeNode(null, NodeType.PLAYER_NODE, player,null, rootGameState!!, this)
         rootNode!!.createChildren(generator)
 
-        val timeout = System.nanoTime() + uctBudgetInNanoseconds
+        // Workers share this counter, so the budget is a total across threads, not per thread
+        // A budget of 0 means "unlimited"; if both are unlimited fall back to the default playout count
+        val playouts = if (uctBudgetInPlayouts > 0) uctBudgetInPlayouts
+                       else if (uctBudgetInMillis > 0) Int.MAX_VALUE else 5_000
+        val playoutsLeft = AtomicInteger(playouts)
+        val deadline = if (uctBudgetInMillis > 0) System.nanoTime() + uctBudgetInMillis * 1_000_000 else Long.MAX_VALUE
 
         // Run MCTS and wait
         val futures = workers.map {
-            it.timeout = timeout
+            it.playoutsLeft = playoutsLeft
+            it.deadline = deadline
             executor.submit(it)
         }
         futures.forEach { it.get() } // Wait for threads to complete

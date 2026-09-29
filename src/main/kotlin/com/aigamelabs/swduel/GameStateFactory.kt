@@ -17,6 +17,20 @@ object GameStateFactory {
         return createNewGameState("P1", "P2", generator)
     }
 
+    /** Skips the wonder draft: each player is dealt 4 random wonders and the game starts directly in Age I. */
+    fun createNewGameStateWithRandomWonders(generator : RandomWithTracker) : GameState {
+        val drafting = createNewGameState(generator)
+        val (p1Wonders, rest) = DeckFactory.createWondersDeck().drawCards(4, generator)
+        val (p2Wonders, unusedWondersDeck) = rest.drawCards(4, generator)
+        return drafting.update(
+                player1City_ = drafting.player1City.update(unbuiltWonders_ = io.vavr.collection.HashSet.ofAll(p1Wonders)),
+                player2City_ = drafting.player2City.update(unbuiltWonders_ = io.vavr.collection.HashSet.ofAll(p2Wonders)),
+                wondersForPickDeck_ = Deck("Wonders for pick"),
+                unusedWondersDeck_ = unusedWondersDeck,
+                decisionQueue_ = Queue.empty()
+        ).addMainTurnDecision(generator, null)
+    }
+
     fun createNewGameState(p1Name : String, p2Name : String, generator : RandomWithTracker) : GameState {
 
         // Initialise the 2 Science token decks

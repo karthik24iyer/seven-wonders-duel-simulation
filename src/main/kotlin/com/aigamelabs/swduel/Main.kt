@@ -44,7 +44,13 @@ class Main {
                     .desc("Location of JSON file containing the initial state")
                     .longOpt("initial-state")
                     .build()
+            val optionWonders = Option.builder("W")
+                    .hasArg()
+                    .desc("How wonders are assigned: 'draft' (default; players pick per the rules) or 'random' (4 dealt to each)")
+                    .longOpt("wonders")
+                    .build()
             val options = Options()
+            options.addOption(optionWonders)
             options.addOption(optionP1)
             options.addOption(optionP2)
             options.addOption(optionLogs)
@@ -62,12 +68,17 @@ class Main {
             val player1Controller = commandLine.getOptionValue("P1")
             val player2Controller = commandLine.getOptionValue("P2")
             val initGameStateLocation = commandLine.getOptionValue("S")
+            val wondersMode = commandLine.getOptionValue("W", "draft")
+            if (wondersMode != "draft" && wondersMode != "random")
+                throw Exception("Unknown wonders mode $wondersMode (expected 'draft' or 'random')")
 
             val generator = RandomWithTracker(Random().nextLong(), true)
             val initGameState = if (commandLine.hasOption("S")) {
                 val content = readFile(initGameStateLocation, Charset.defaultCharset())
                 GameState.loadFromJson(JSONObject(content))
             }
+            else if (wondersMode == "random")
+                GameStateFactory.createNewGameStateWithRandomWonders(generator)
             else
                 GameStateFactory.createNewGameState(generator)
 
@@ -76,10 +87,18 @@ class Main {
             val gameData = GameData(listOf(player1Controller, player2Controller))
             val player1 = Pair(PlayerTurn.PLAYER_1, getPlayer(PlayerTurn.PLAYER_1, player1Controller, gameData, gameId, logsLocation))
             val player2 = Pair(PlayerTurn.PLAYER_2, getPlayer(PlayerTurn.PLAYER_2, player2Controller, gameData, gameId, logsLocation))
-            val game = Game(gameId, mapOf(player1, player2), logsLocation)
+            val game = Game(gameId, mapOf(player1, player2), logsLocation, mapOf(
+                    "p1" to player1Controller,
+                    "p2" to player2Controller,
+                    "wonders" to wondersMode
+            ))
 
             generator.popAll()
-            game.mainLoop(initGameState, generator)
+            try {
+                game.mainLoop(initGameState, generator)
+            } catch (e: Exception) {
+                System.exit(1) // already logged by mainLoop; exit explicitly or the MCTS worker threads keep the JVM alive
+            }
             System.exit(0)
         }
 
@@ -94,6 +113,7 @@ class Main {
             return when (playerClass) {
                 "MCTS" -> MctsVictory(player, "MCTS", gameId, gameData, logsPath)
                 "MCTS_Civilian" -> MctsCivilian(player, "MCTS_CIV", gameId, gameData, logsPath)
+                "MCTS_Opportunist" -> MctsOpportunist(player, "MCTS_OPP", gameId, gameData, logsPath)
                 "MCTS_Science" -> MctsScience(player, "MCTS_SCI", gameId, gameData, logsPath)
                 "MCTS_Military" -> MctsMilitary(player, "MCTS_MIL", gameId, gameData, logsPath)
                 "DDA" -> MctsDDA(player, "DDA(HS)", gameId, gameData, logsPath)

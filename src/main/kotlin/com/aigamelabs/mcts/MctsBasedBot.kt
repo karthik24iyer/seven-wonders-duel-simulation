@@ -146,8 +146,15 @@ abstract class MctsBasedBot<T: AbstractGameState<T>>(
 
     }
 
+    override fun lastDecisionValues(): Map<String, Double>? {
+        val scorer = ActionSelection.averageScore<T>()
+        return manager.rootNode?.children?.values
+                ?.associate { Pair(it.selectedAction.toString(), scorer(it)) }
+                ?.filterValues { it.isFinite() }
+    }
+
     override fun init() {
-        openLog(Paths.get(outPath, "${gameId}_player_${playerId}_mcts.json").toAbsolutePath().toString())
+        openLog(Paths.get(outPath, "${gameId}_player_${PlayerTurn.getPlayerNumber(player)}_${playerId}_mcts.json").toAbsolutePath().toString())
     }
 
     override fun finalize(gameState: T) {

@@ -273,7 +273,8 @@ class TreeNode<T: AbstractGameState<T>>(
     override fun toString(): String {
         val builder = StringBuilder()
         children!!.values
-                .sortedBy { -it.playersScore[player]!! / it.games }
+                // A tight budget can leave some children unvisited: no score yet, so sort them last instead of crashing
+                .sortedBy { if (it.games > 0) -it.playersScore[player]!! / it.games else Double.MAX_VALUE }
                 .forEach {
                     if (it.games > 0) {
                         val score = (100 * it.playersScore[player]!! / it.games).roundToInt()

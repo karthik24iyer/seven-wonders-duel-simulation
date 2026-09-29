@@ -5,6 +5,7 @@ import com.aigamelabs.game.PlayerTurn
 import com.aigamelabs.utils.RandomWithTracker
 import com.aigamelabs.swduel.*
 import com.aigamelabs.swduel.enums.*
+import io.vavr.collection.HashSet
 import java.util.logging.Logger
 
 
@@ -21,21 +22,30 @@ class BuildWonder(playerTurn: PlayerTurn, val card: Card) : Action<GameState>(pl
         // Move card
         val updatedUnbuiltWonders = playerCity.unbuiltWonders.remove(card)
         val updatedWonders = playerCity.wonders.add(card)
-        val updatedPlayerCity = playerCity.update(wonders_ = updatedWonders, unbuiltWonders_ = updatedUnbuiltWonders,
+        // "As soon as either player constructs the game's 7th Wonder, the last Wonder is returned to the box"
+        val wasSeventh = updatedWonders.size() + opponentCity.wonders.size() >= 7
+        val updatedPlayerCity = playerCity.update(wonders_ = updatedWonders,
+                unbuiltWonders_ = if (wasSeventh) HashSet.empty() else updatedUnbuiltWonders,
                 coins_ = playerCoins - cost)
+        // Economy: "You gain the money spent by your opponent when they trade for resources"
+        val updatedOpponentCity = (if (opponentCity.hasProgressToken(Enhancement.ECONOMY))
+            opponentCity.addCoins(playerCity.tradingCost(card, opponentCity)) else opponentCity)
+                .let { if (wasSeventh) it.update(unbuiltWonders_ = HashSet.empty()) else it }
 
 
-        val hasExtraTurn = gameState.getPlayerCity(player).hasProgressToken(Enhancement.THEOLOGY) ||
+        // A replay earned with the last card of an Age is lost; treating it as a normal turn also keeps
+        // "the last active player" right for choosing who starts the next Age
+        val hasExtraTurn = !gameState.cardStructure!!.isEmpty() && (gameState.getPlayerCity(player).hasProgressToken(Enhancement.THEOLOGY) ||
                 setOf(
                         Wonders.PIRAEUS,
                         Wonders.THE_SPHINX,
                         Wonders.THE_APPIAN_WAY,
                         Wonders.THE_HANGING_GARDENS,
                         Wonders.THE_TEMPLE_OF_ARTEMIS
-                ).contains(card.wonders)
+                ).contains(card.wonders))
 
-        val updatedPlayer1City = if (player == PlayerTurn.PLAYER_1) updatedPlayerCity else opponentCity
-        val updatedPlayer2City = if (player == PlayerTurn.PLAYER_2) updatedPlayerCity else opponentCity
+        val updatedPlayer1City = if (player == PlayerTurn.PLAYER_1) updatedPlayerCity else updatedOpponentCity
+        val updatedPlayer2City = if (player == PlayerTurn.PLAYER_2) updatedPlayerCity else updatedOpponentCity
         val updatedGameState = if (hasExtraTurn)
             gameState.update(player1City_ = updatedPlayer1City, player2City_ = updatedPlayer2City)
         else
@@ -48,7 +58,7 @@ class BuildWonder(playerTurn: PlayerTurn, val card: Card) : Action<GameState>(pl
     private fun processWonders(gameState: GameState, generator: RandomWithTracker, logger: Logger?): GameState {
         return when (card.wonders) {
             Wonders.THE_GREAT_LIBRARY -> {
-                gameState.addSelectDiscardedProgressTokenDecision(player)
+                gameState.addSelectDiscardedProgressTokenDecision(player, generator)
             }
 
             Wonders.THE_MAUSOLEUM -> {

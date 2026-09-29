@@ -79,6 +79,13 @@ If the command seems too long, you can have Gradle generate cross-platform runni
 and then running
 `./build/bin/tictactoe -P1 MCTS_Military -P2 Random -L /home/marco/seven_wonders_duel_logs/ com.aigamelabs.tictactoe.Main`
 
+=== Web UI (Seven Wonders: Duel)
+`./gradlew ui`, then open http://localhost:8377 to run batches of bot-vs-bot games, watch statistics fill in, and replay any game move by move.
+Runs are stored under `logs/ui/` and survive restarts.
+
+MCTS bots think for a fixed number of playouts per move (`-Dswduel.mcts.playouts=5000`), optionally capped by wall-clock time (`-Dswduel.mcts.millis=1000`); whichever runs out first ends the search.
+`-W random` deals wonders at random instead of drafting them.
+
 === Seven Wonders: Duel
 
 The available controllers for the game are:

@@ -6,6 +6,7 @@ import com.aigamelabs.utils.RandomWithTracker
 import com.aigamelabs.mcts.NodeType
 import com.aigamelabs.utils.Util
 import java.util.*
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Level
 
 /**
@@ -19,15 +20,20 @@ class UctWorker<T: AbstractGameState<T>>(
         private val workerId: String
 ) : Runnable {
 
-    var timeout: Long = 0
+    /** Playouts remaining in this decision's budget; shared by all workers. */
+    var playoutsLeft: AtomicInteger? = null
+
+    /** System.nanoTime() after which to stop regardless of playouts left. */
+    var deadline: Long = Long.MAX_VALUE
 
     private val generator = RandomWithTracker(Random().nextLong())
 
     /**
-     * Runs UCT until a timeout is hit.
+     * Runs UCT until the shared playout budget is exhausted or the deadline passes.
      */
     override fun run() {
-        while (System.nanoTime() <= timeout) {
+        val budget = playoutsLeft!!
+        while (budget.getAndDecrement() > 0 && System.nanoTime() < deadline) {
             try {
                 uct()
             }

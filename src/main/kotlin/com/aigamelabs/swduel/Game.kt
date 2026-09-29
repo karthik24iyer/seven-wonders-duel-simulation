@@ -6,6 +6,8 @@ import com.aigamelabs.swduel.enums.GameOutcome
 import com.aigamelabs.swduel.enums.GamePhase
 import com.aigamelabs.game.PlayerTurn
 import com.aigamelabs.utils.MinimalFormatter
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.Paths
@@ -30,7 +32,13 @@ import javax.json.stream.JsonGenerator
  *    The `process` method also takes care of adding new decisions to the queue, if any.
  *  - Repeat
  */
-class Game(gameId: String, private val players : Map<PlayerTurn, Player<GameState>>, logPath: String) {
+class Game(
+        private val gameId: String,
+        private val players : Map<PlayerTurn, Player<GameState>>,
+        private val logPath: String,
+        /** Free-form settings copied verbatim into the summary file (controllers, budgets, ...) */
+        private val meta: Map<String, Any> = emptyMap()
+) {
 
     private val logger = Logger.getLogger("SevenWondersDuel_Messages")
 
@@ -60,7 +68,50 @@ class Game(gameId: String, private val players : Map<PlayerTurn, Player<GameStat
     private val jgf = Json.createGeneratorFactory(properties)
     private val jsonGen = jgf.createGenerator(fos)
 
+    // Compact per-game record for the UI: one entry per move instead of the full state dump above
+    private val steps = JSONArray()
+    private val cardColors = JSONObject()
+
+    /** Victory points, or null once the pawn reaches a capital: the engine refuses to score a military supremacy. */
+    private fun victoryPoints(gameState: GameState, player: PlayerTurn): Any =
+            if (Math.abs(gameState.militaryBoard.conflictPawnPosition) >= 9) JSONObject.NULL
+            else gameState.calculateVictoryPoints(player)
+
+    private fun cityJson(gameState: GameState, player: PlayerTurn): JSONObject {
+        val city = gameState.getPlayerCity(player)
+        val names = { cards: Iterable<Card> ->
+            JSONArray(cards.map { cardColors.put(it.name, it.color.toString()); it.name }.sorted())
+        }
+        return JSONObject()
+                .put("coins", city.coins)
+                .put("vp", victoryPoints(gameState, player))
+                .put("science", gameState.countScienceSymbols(player))
+                .put("buildings", names(city.buildings))
+                .put("wonders", names(city.wonders))
+                .put("unbuilt", names(city.unbuiltWonders))
+                .put("tokens", names(city.progressTokens))
+    }
+
+    private fun writeSummary(gameState: GameState, outcome: GameOutcome, durationMs: Long) {
+        val summary = JSONObject(meta)
+                .put("game_id", gameId)
+                .put("outcome", outcome.toString())
+                .put("victory_type", gameState.gamePhase.toString())
+                .put("p1_vp", victoryPoints(gameState, PlayerTurn.PLAYER_1))
+                .put("p2_vp", victoryPoints(gameState, PlayerTurn.PLAYER_2))
+                .put("pawn", gameState.militaryBoard.conflictPawnPosition)
+                .put("moves", steps.length())
+                .put("duration_ms", durationMs)
+                .put("card_colors", cardColors)
+                .put("steps", steps)
+        // Write-then-rename so the UI server, which polls for this file, never reads half of it
+        val tmp = File(logPath, "summary.json.tmp")
+        tmp.writeText(summary.toString())
+        tmp.renameTo(File(logPath, "summary.json"))
+    }
+
     fun mainLoop(startingGameState : GameState, generator : RandomWithTracker) {
+        val startedAt = System.currentTimeMillis()
 
         try {
             jsonGen.writeStartArray()
@@ -78,10 +129,12 @@ class Game(gameId: String, private val players : Map<PlayerTurn, Player<GameStat
             players.forEach { it.value.close() }
 
             jsonGen.writeEnd()
+            jsonGen.close() // without this the closing bracket never reaches the file
 
             // Determine winner
             val gameOutcome = gameState.calculateWinner(logger)
             val outcome = gameOutcome.first
+            writeSummary(gameState, outcome, System.currentTimeMillis() - startedAt)
             val p1VictoryPoints = gameOutcome.second
             val p2VictoryPoints = gameOutcome.third
             when (gameState.gamePhase) {
@@ -119,7 +172,8 @@ class Game(gameId: String, private val players : Map<PlayerTurn, Player<GameStat
         // Dequeue decision and enqueue the next one
         var (gameState_, thisDecision) = gameState.dequeDecision()
 
-        val action = if (thisDecision.options.size() > 1) {
+        val queried = thisDecision.options.size() > 1
+        val action = if (queried) {
             // Query player for action
             logger?.info("Querying ${thisDecision.player}; options:\n" +
                     thisDecision.options
@@ -148,6 +202,17 @@ class Game(gameId: String, private val players : Map<PlayerTurn, Player<GameStat
         // Process action
         gameState_= action.process(gameState_, generator, logger)
         logger.handlers.forEach { it.flush() }
+
+        steps.put(JSONObject()
+                .put("player", PlayerTurn.getPlayerNumber(thisDecision.player))
+                .put("action", action.toString())
+                .put("options", thisDecision.options.size())
+                .put("note", if (queried) players[thisDecision.player]!!.lastDecisionNote() else null)
+                .put("values", if (queried) players[thisDecision.player]!!.lastDecisionValues()?.let { JSONObject(it) } else null)
+                .put("phase", gameState_.gamePhase.toString())
+                .put("pawn", gameState_.militaryBoard.conflictPawnPosition)
+                .put("p1", cityJson(gameState_, PlayerTurn.PLAYER_1))
+                .put("p2", cityJson(gameState_, PlayerTurn.PLAYER_2)))
 
         jsonGen.write(action.toString())
         gameState_.toJson(jsonGen)

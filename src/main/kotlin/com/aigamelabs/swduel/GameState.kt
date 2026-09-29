@@ -131,15 +131,17 @@ data class GameState(
      * Checks whether the current state should be flagged for science supremacy.
      */
     fun testScienceSupremacy(playerTurn: PlayerTurn) : Boolean {
+        return countScienceSymbols(playerTurn) >= 6
+    }
+
+    /** Distinct scientific symbols in a city, counting the Law token; 6 win the game. */
+    fun countScienceSymbols(playerTurn: PlayerTurn) : Int {
         val playerCity = getPlayerCity(playerTurn)
-        val hasLawToken = !playerCity.progressTokens.filter { it.enhancement == Enhancement.LAW }.isEmpty
         val symbolsFromGreenCards = playerCity.buildings
                 .filter{ it.scienceSymbol != ScienceSymbol.NONE}
                 .map { it.scienceSymbol }
                 .distinct().size()
-        val distinctScienceSymbols = symbolsFromGreenCards + if (hasLawToken) 1 else 0
-
-        return distinctScienceSymbols >= 6
+        return symbolsFromGreenCards + if (playerCity.hasProgressToken(Enhancement.LAW)) 1 else 0
     }
 
     /**
@@ -171,7 +173,7 @@ data class GameState(
         else this
     }
 
-    private fun calculateVictoryPoints(player : PlayerTurn, logger: Logger?) : Int {
+    fun calculateVictoryPoints(player : PlayerTurn, logger: Logger? = null) : Int {
         val playerCity = getPlayerCity(player)
         val opponentCity = getPlayerCity(player.opponent())
         val logMsg = StringBuilder()
@@ -231,7 +233,10 @@ data class GameState(
                 else -> { throw Exception("Formula for victory points is not ABSOLUTE but reference city is NOT_APPLICABLE")}
             }
             CityForFormula.CITY_WITH_MOST_UNITS  -> when (formula) {
-                Formula.PER_BROWN_AND_GRAY_CARD -> { fhc(CardColor.BROWN) + fhc(CardColor.GRAY) }
+                // "The player is forced to choose one, and only one, city for both colors of cards"
+                Formula.PER_BROWN_AND_GRAY_CARD -> { Math.max(
+                        fpc(CardColor.BROWN) + fpc(CardColor.GRAY),
+                        opponentCity.countBuildingsByColor(CardColor.BROWN) + opponentCity.countBuildingsByColor(CardColor.GRAY)) }
                 Formula.PER_BROWN_CARD -> { fhc(CardColor.BROWN) }
                 Formula.PER_GRAY_CARD -> { fhc(CardColor.GRAY) }
                 Formula.PER_GREEN_CARD -> { fhc(CardColor.GREEN) }
@@ -244,7 +249,7 @@ data class GameState(
 
             }
             CityForFormula.YOUR_CITY-> when (formula) {
-                Formula.PER_BROWN_AND_GRAY_CARD -> { fhc(CardColor.BROWN) + fhc(CardColor.GRAY) }
+                Formula.PER_BROWN_AND_GRAY_CARD -> { fpc(CardColor.BROWN) + fpc(CardColor.GRAY) }
                 Formula.PER_BROWN_CARD -> { fpc(CardColor.BROWN) }
                 Formula.PER_GRAY_CARD -> { fpc(CardColor.GRAY) }
                 Formula.PER_GREEN_CARD -> { fpc(CardColor.GREEN) }
@@ -289,7 +294,18 @@ data class GameState(
                 when {
                     p1VictoryPoints > p2VictoryPoints -> Triple(GameOutcome.PLAYER_1_VICTORY, p1VictoryPoints, p2VictoryPoints)
                     p2VictoryPoints > p1VictoryPoints -> Triple(GameOutcome.PLAYER_2_VICTORY, p1VictoryPoints, p2VictoryPoints)
-                    else -> Triple(GameOutcome.TIE, p1VictoryPoints, p2VictoryPoints)
+                    else -> {
+                        // Tied on points: most points from civilian (blue) buildings wins, otherwise the victory is shared
+                        val bluePoints = { p: PlayerTurn -> getPlayerCity(p).buildings
+                                .filter { it.color == CardColor.BLUE }.map { it.victoryPoints }.sum().toInt() }
+                        val p1Blue = bluePoints(PlayerTurn.PLAYER_1)
+                        val p2Blue = bluePoints(PlayerTurn.PLAYER_2)
+                        when {
+                            p1Blue > p2Blue -> Triple(GameOutcome.PLAYER_1_VICTORY, p1VictoryPoints, p2VictoryPoints)
+                            p2Blue > p1Blue -> Triple(GameOutcome.PLAYER_2_VICTORY, p1VictoryPoints, p2VictoryPoints)
+                            else -> Triple(GameOutcome.TIE, p1VictoryPoints, p2VictoryPoints)
+                        }
+                    }
                 }
             }
             GamePhase.SCIENCE_SUPREMACY -> when {
@@ -310,15 +326,22 @@ data class GameState(
         // Add card to appropriate player city
         val playerCity = getPlayerCity(player)
         val opponentCity = getPlayerCity(player.opponent())
+        val cityWithCard = playerCity.update(buildings_ = playerCity.buildings.add(card))
+        // Counted with the new card in place: the Lighthouse pays for "each yellow card (including itself)"
         val coins = if (card.coinsProduced > 0)
-            card.coinsProduced * getMultiplier(card.coinsProducedFormula, card.coinsProducedReferenceCity, playerCity, opponentCity)
+            card.coinsProduced * getMultiplier(card.coinsProducedFormula, card.coinsProducedReferenceCity, cityWithCard, opponentCity)
         else
             0
         val cost = if (forFree)
             0
         else
             playerCity.canBuild(card, opponentCity) ?: throw Exception("Building not affordable $card")
-        val updatedPlayerCity = playerCity.update(buildings_ = playerCity.buildings.add(card), coins_ = playerCity.coins + coins - cost)
+        // A Mausoleum build (forFree) is free but not a chain build, so it earns no Urbanism bonus
+        val urbanismBonus = if (!forFree && playerCity.hasLinkFor(card) && playerCity.hasProgressToken(Enhancement.URBANISM)) 4 else 0
+        val updatedPlayerCity = cityWithCard.update(coins_ = playerCity.coins + coins + urbanismBonus - cost)
+        val paidForTrading = if (forFree) 0 else playerCity.tradingCost(card, opponentCity)
+        // Economy: "You gain the money spent by your opponent when they trade for resources"
+        val paidOpponentCity = if (opponentCity.hasProgressToken(Enhancement.ECONOMY)) opponentCity.addCoins(paidForTrading) else opponentCity
 
         // Handle military cards
         val updatedMilitaryBoard: MilitaryBoard
@@ -331,13 +354,13 @@ data class GameState(
             // Apply penalty to opponent city, if any
             val opponentPenalty = additionOutcome.first
             updatedOpponentCity = if (opponentPenalty > 0)
-                opponentCity.update(coins_ = opponentCity.coins - opponentPenalty)
+                paidOpponentCity.removeCoins(opponentPenalty)
             else
-                opponentCity
+                paidOpponentCity
         } else {
             // Unchanged
             updatedMilitaryBoard = militaryBoard
-            updatedOpponentCity = opponentCity
+            updatedOpponentCity = paidOpponentCity
         }
 
         val updatedPlayer1City = if (player == PlayerTurn.PLAYER_1) updatedPlayerCity else updatedOpponentCity
@@ -348,7 +371,8 @@ data class GameState(
                 militaryBoard_ = updatedMilitaryBoard
         )
 
-        updatedGameState = if (card.color == CardColor.GREEN && updatedPlayerCity.twoScienceCardsWithSymbol(card.scienceSymbol))
+        updatedGameState = if (card.color == CardColor.GREEN && updatedPlayerCity.twoScienceCardsWithSymbol(card.scienceSymbol)
+                && availableProgressTokens.size() > 0)
             updatedGameState.addSelectProgressTokenDecision(player)
         else
             updatedGameState.addMainTurnDecision(generator, logger)
@@ -402,7 +426,7 @@ data class GameState(
         val opponentCity = getPlayerCity(nextPlayer.opponent())
         val canBuildSomeWonders =
                 !playerCity.unbuiltWonders.filter { playerCity.canBuild(it, opponentCity) != null }.isEmpty &&
-                        getPlayerCity(nextPlayer.opponent()).wonders.size() < 4
+                        playerCity.wonders.size() + opponentCity.wonders.size() < 7
 
         val availCards = cardStructure!!.availableCards()
         // The player can always burn any uncovered card for money
@@ -439,8 +463,9 @@ data class GameState(
         return enqueue(decision)
     }
 
-    fun addSelectDiscardedProgressTokenDecision(player: PlayerTurn): GameState {
-        val actions: Vector<Action<GameState>> = discardedProgressTokens.cards
+    fun addSelectDiscardedProgressTokenDecision(player: PlayerTurn, generator: RandomWithTracker): GameState {
+        val (drawn, _) = discardedProgressTokens.drawCards(Math.min(3, discardedProgressTokens.size()), generator)
+        val actions: Vector<Action<GameState>> = drawn
                 .map { ChooseUnusedProgressToken(player, it) }
         val decision = Decision(player, Vector.ofAll(actions))
         return enqueue(decision)

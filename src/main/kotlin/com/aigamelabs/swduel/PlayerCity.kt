@@ -41,15 +41,27 @@ data class PlayerCity(
      * Calculates whether this city can afford building a given new building and returns the cost associated with an
      * optimal choice of alternatively produced resources.
      */
+    /** Whether this city holds the building whose chain symbol makes the given card free to construct. */
+    fun hasLinkFor(card: Card) : Boolean {
+        return card.linksTo != LinkingSymbol.NONE && buildings.exists { it.linkingSymbol == card.linksTo }
+    }
+
+    /**
+     * Coins that constructing the given card sends to the bank for missing resources (as opposed to the coin cost
+     * printed on the card). This is the amount an opponent holding the Economy token collects.
+     */
+    fun tradingCost(card: Card, opponentCity: PlayerCity) : Int {
+        return if (hasLinkFor(card)) 0 else (canBuild(card, opponentCity) ?: 0) - card.coinCost
+    }
+
     fun canBuild(newBuilding: Card, opponentCity: PlayerCity) : Int? {
         var resourceCost = newBuilding.resourceCost
 
+        if (hasLinkFor(newBuilding))
+            return 0
+
         var altProduction : Vector<ResourcesAlternative> = Vector.empty()
         for (building in buildings.plus(wonders)) {
-            // Check linking symbols
-            if (newBuilding.linksTo != LinkingSymbol.NONE && newBuilding.linksTo == building.linkingSymbol) {
-                return 0
-            }
             // Calculate resources production
             building.resourceProduction.forEach { resource, tot ->
                 resourceCost = resourceCost.put(resource, resourceCost.getOrElse(resource, 0) - tot)
@@ -62,10 +74,10 @@ data class PlayerCity(
 
         // Handle Architecture and Masonry discounts
         if (newBuilding.color == CardColor.WONDER && hasProgressToken(Enhancement.ARCHITECTURE)) {
-            altProduction.appendAll(Stream.of(ResourcesAlternative.ANY, ResourcesAlternative.ANY))
+            altProduction = altProduction.appendAll(Stream.of(ResourcesAlternative.ANY, ResourcesAlternative.ANY))
         }
         if (newBuilding.color == CardColor.BLUE && hasProgressToken(Enhancement.MASONRY)) {
-            altProduction.appendAll(Stream.of(ResourcesAlternative.ANY, ResourcesAlternative.ANY))
+            altProduction = altProduction.appendAll(Stream.of(ResourcesAlternative.ANY, ResourcesAlternative.ANY))
         }
 
         // Calculate remaining coin cost given optimal choices
@@ -99,7 +111,7 @@ data class PlayerCity(
      * Removes from the opponent city the specified amount of coins
      */
     fun removeCoins(coinsToBeRemoved: Int): PlayerCity {
-        return update(coins_ = coins - coinsToBeRemoved)
+        return update(coins_ = Math.max(0, coins - coinsToBeRemoved))
     }
 
     /**

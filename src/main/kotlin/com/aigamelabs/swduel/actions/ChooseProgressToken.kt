@@ -13,7 +13,8 @@ class ChooseProgressToken(playerTurn: PlayerTurn, val card : Card) : Action<Game
         val playerCity =  gameState.getPlayerCity(player)
         val opponentCity =  gameState.getPlayerCity(player.opponent())
         val updatedProgressTokens = playerCity.progressTokens.add(card)
-        val updatedPlayerCity = playerCity.update(progressTokens_ = updatedProgressTokens)
+        val updatedPlayerCity = playerCity.update(progressTokens_ = updatedProgressTokens,
+                coins_ = playerCity.coins + card.coinsProduced) // Agriculture and Urbanism pay 6 coins on the spot
         val updatedPlayer1City = if (player == PlayerTurn.PLAYER_1) updatedPlayerCity else opponentCity
         val updatedPlayer2City = if (player == PlayerTurn.PLAYER_2) updatedPlayerCity else opponentCity
 

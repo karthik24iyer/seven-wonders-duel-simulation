@@ -41,8 +41,21 @@ abstract class Manager<T: AbstractGameState<T>>(
     /** Depth of the search tree  */
     var maxUctTreeDepth: Int = 100
 
-    /** UCT execution time budget (in frames)  */
-    var uctBudgetInNanoseconds: Long = 1_000_000_000
+    /**
+     * UCT budget, as a number of playouts per decision.
+     *
+     * Measured beforehand with a wall-clock budget: playout cost varies ~1500x over a game
+     * (early playouts run ~60 moves to reach the end, late ones run ~1), so a fixed 1s gave
+     * ~1k playouts on the opening move and ~1.5M on the last. Counting playouts instead
+     * spends the time where the tree is actually shallow, and makes search strength
+     * independent of machine speed and load.
+     *
+     * 5_000 is roughly wall-clock-neutral versus the old 1s budget over a whole game.
+     */
+    var uctBudgetInPlayouts: Int = Integer.getInteger("swduel.mcts.playouts", 5_000)
+
+    /** Optional wall-clock cap per decision, in milliseconds; 0 = no cap. Whichever budget runs out first ends the search. */
+    var uctBudgetInMillis: Long = java.lang.Long.getLong("swduel.mcts.millis", 0)
 
     internal val logger = Logger.getLogger("SevenWondersDuel_$playerId")
     init {

@@ -1,0 +1,517 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>7 Wonders Duel — Bot Arena</title>
+<style>
+  :root {
+    --bg: #f4f1ea; --panel: #fffdf8; --ink: #2a2622; --muted: #7a7268; --line: #e2dccf; --accent: #9a5b1e;
+    --p1: #d9772b; --p2: #2f8fb5; --tie: #9a948a;
+    --points: #4a7fd4; --science: #2e9e5b; --military: #cf3b3b;
+    --BROWN: #8b5a2b; --GRAY: #7d848e; --BLUE: #2f6fd0; --GREEN: #2e9e5b; --GOLD: #c9971a; --RED: #cf3b3b;
+    --PURPLE: #8e4fc2; --WONDER: #5b5348; --PROGRESS_TOKEN: #1d8a7a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #191715; --panel: #23201d; --ink: #ece6dc; --muted: #9c9388; --line: #38332d; --accent: #e0a15e; --WONDER: #a39a8c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 14px 24px; border-bottom: 1px solid var(--line); }
+  header h1 { font: 600 18px Georgia, serif; margin: 0; flex: 1; letter-spacing: .2px; }
+  header h1 small { color: var(--muted); font: 13px system-ui; margin-left: 8px; }
+  select, input[type=number] { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  .layout { display: grid; grid-template-columns: 340px 1fr; gap: 20px; padding: 20px 24px; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; padding: 16px; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  h2 { font: 600 12px system-ui; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 0 0 10px; }
+  .field { margin-bottom: 18px; }
+  .field > label, .field > .label { display: block; font-weight: 600; margin-bottom: 4px; }
+  .hint { color: var(--muted); font-size: 12.5px; margin: 4px 0 0; }
+  .choice { display: block; border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; margin-top: 6px; cursor: pointer; }
+  .choice:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .choice input { margin-right: 6px; }
+  .choice b { font-weight: 600; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .row select, .row input[type=number] { flex: 1; min-width: 0; }
+  .chips button { font: inherit; font-size: 12px; padding: 3px 9px; border-radius: 99px; border: 1px solid var(--line); background: none; color: var(--muted); cursor: pointer; }
+  .chips button:hover { color: var(--ink); border-color: var(--muted); }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
+  #estimate { background: var(--bg); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+  #estimate b { font-size: 20px; font-family: Georgia, serif; }
+  button.primary { width: 100%; font: 600 15px system-ui; padding: 11px; border: 0; border-radius: 8px; background: var(--accent); color: var(--panel); cursor: pointer; }
+  button.primary:disabled { opacity: .45; cursor: default; }
+  button.danger { font: inherit; padding: 5px 12px; border-radius: 6px; border: 1px solid var(--military); color: var(--military); background: none; cursor: pointer; }
+  main { display: grid; gap: 16px; min-width: 0; }
+  #progress .bar { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; margin: 8px 0 6px; }
+  #progress .bar i { display: block; height: 100%; background: var(--accent); transition: width .6s; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+  .tile b { display: block; font: 600 24px Georgia, serif; }
+  .tile span { color: var(--muted); font-size: 12.5px; }
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  svg text { fill: var(--muted); font: 11px system-ui; }
+  .caption { color: var(--muted); font-size: 12.5px; margin: 8px 0 0; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font: 600 11.5px system-ui; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--bg); }
+  .tablewrap { max-height: 460px; overflow: auto; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; color: #fff; }
+  .empty { color: var(--muted); text-align: center; padding: 50px 20px; }
+  .empty b { display: block; font: 600 17px Georgia, serif; color: var(--ink); margin-bottom: 4px; }
+
+  dialog { width: min(1180px, 96vw); max-height: 94vh; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); padding: 0; }
+  dialog::backdrop { background: rgba(10, 8, 6, .55); }
+  .dhead { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 1; }
+  .dhead h3 { margin: 0; flex: 1; font: 600 16px Georgia, serif; }
+  .dhead button { font: inherit; background: none; border: 1px solid var(--line); color: inherit; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  .dbody { padding: 16px 18px; display: grid; gap: 14px; }
+  .scrub { display: flex; align-items: center; gap: 10px; }
+  .scrub input { flex: 1; accent-color: var(--accent); }
+  .scrub button { font: inherit; background: none; border: 1px solid var(--line); color: inherit; border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+  .move { background: var(--bg); border-radius: 8px; padding: 10px 12px; }
+  .move .what { font-weight: 600; font-size: 15px; }
+  .opt { display: grid; grid-template-columns: minmax(120px, 280px) 1fr 42px; gap: 8px; align-items: center; font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+  .opt.chosen { color: var(--ink); font-weight: 600; }
+  .opt i { display: block; height: 7px; border-radius: 99px; background: var(--line); }
+  .opt i b { display: block; height: 100%; border-radius: 99px; }
+  .opt span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .track { display: grid; grid-template-columns: repeat(19, 1fr); gap: 2px; }
+  .track div { height: 16px; border-radius: 3px; background: var(--line); position: relative; }
+  .track div.zone2 { opacity: .8; } .track div.zone3 { opacity: .6; }
+  .track div.pawn::after { content: ""; position: absolute; inset: -4px 15%; border-radius: 4px; background: var(--ink); }
+  .ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .cities { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 760px) { .cities { grid-template-columns: 1fr; } }
+  .city { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .city h4 { margin: 0 0 6px; font-size: 14px; }
+  .stats { display: flex; gap: 14px; color: var(--muted); font-size: 12.5px; margin-bottom: 8px; }
+  .stats b { color: var(--ink); }
+  .chipset { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; min-height: 22px; }
+  .chip { font-size: 11.5px; padding: 2px 7px; border-radius: 4px; color: #fff; }
+  .chip.ghost { background: none !important; color: var(--muted); border: 1px dashed var(--muted); }
+  .chip.new { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--ink); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>7 Wonders Duel <small>bot arena</small></h1>
+  <label for="runPicker" style="color:var(--muted)">Showing</label>
+  <select id="runPicker"></select>
+</header>
+
+<div class="layout">
+  <aside class="card">
+    <h2>New simulation</h2>
+    <form id="setup">
+      <div class="field">
+        <span class="label">How wonders are handed out</span>
+        <label class="choice"><input type="radio" name="wonders" value="draft" checked><b>Draft, as in the rulebook</b>
+          <p class="hint">4 wonders are revealed: Bot 1 takes one, Bot 2 takes two, Bot 1 gets the last. Then 4 more, the other way round.</p></label>
+        <label class="choice"><input type="radio" name="wonders" value="random"><b>Random deal</b>
+          <p class="hint">Each bot is simply dealt 4 random wonders. No choosing.</p></label>
+      </div>
+
+      <div class="field">
+        <span class="label">Play style</span>
+        <div class="row" style="margin-bottom:6px"><span class="dot" style="background:var(--p1)"></span><span style="width:40px">Bot 1</span><select name="p1"></select></div>
+        <div class="row"><span class="dot" style="background:var(--p2)"></span><span style="width:40px">Bot 2</span><select name="p2"></select></div>
+        <p class="hint">Bot 1 always moves first.</p>
+      </div>
+
+      <div class="field">
+        <label for="playouts">Practice games imagined before each move</label>
+        <div class="row"><input type="number" id="playouts" name="playouts" min="100" max="10000000" step="100" value="5000">
+          <span class="chips row"><button type="button" data-v="1000">Quick</button><button type="button" data-v="5000">Standard</button><button type="button" data-v="20000">Deep</button></span></div>
+        <p class="hint">Before every move, a bot plays the rest of the game out in its head this many times and picks the move that won most often. More = stronger and slower. Past 5,000 the gain is small.</p>
+      </div>
+
+      <div class="field">
+        <label><input type="checkbox" id="useMillis"> Also cap thinking time per move</label>
+        <div class="row" style="margin-top:4px"><input type="number" id="seconds" min="0.1" max="600" step="0.1" value="1" disabled><span>seconds</span></div>
+        <p class="hint">Off by default. When on, a bot moves as soon as <em>either</em> limit is reached — faster runs, but weaker opening moves, which are the slowest to think about.</p>
+      </div>
+
+      <div class="field row">
+        <div style="flex:1"><label for="games" style="font-weight:600">Games to play</label><br><input type="number" id="games" name="games" min="1" max="10000" value="100" style="width:100%"></div>
+        <div style="flex:1"><label for="parallel" style="font-weight:600">At the same time</label><br><input type="number" id="parallel" name="parallel" min="1" value="1" style="width:100%"></div>
+      </div>
+
+      <div id="estimate"></div>
+      <button class="primary" id="startBtn">Start simulation</button>
+      <p class="hint" id="formError" style="color:var(--military)"></p>
+    </form>
+  </aside>
+
+  <main id="main"></main>
+</div>
+
+<dialog id="detail"></dialog>
+
+<script>
+const STYLES = {
+  MCTS: 'Balanced — just tries to win',
+  MCTS_Opportunist: 'Opportunist — probes science and military, then bullies on whichever is working',
+  MCTS_Civilian: 'Builder — aims to win on points',
+  MCTS_Science: 'Scientist — aims for science supremacy',
+  MCTS_Military: 'Warlord — aims for military supremacy',
+  Random: 'Random — picks moves blindly',
+};
+const HOW = {
+  CIVILIAN_VICTORY: { label: 'Points', color: 'var(--points)' },
+  SCIENCE_SUPREMACY: { label: 'Science', color: 'var(--science)' },
+  MILITARY_SUPREMACY: { label: 'Military', color: 'var(--military)' },
+};
+const PHASES = { WONDERS_SELECTION: 'Wonder draft', FIRST_AGE: 'Age I', SECOND_AGE: 'Age II', THIRD_AGE: 'Age III' };
+const COLOR_ORDER = ['BROWN', 'GRAY', 'GOLD', 'BLUE', 'GREEN', 'RED', 'PURPLE'];
+
+// Imagined games per second at each of one bot's decisions over a game, measured on this machine with one game
+// running. Early moves are slow because every imagined game has ~60 moves left to play out. Only used for the
+// up-front estimate: once a few games finish, the remaining time is projected from real progress instead.
+const RATE = [989, 2791, 3006, 3131, 3098, 3206, 3265, 3336, 3410, 3591, 3646, 3779, 3770, 3787, 3983, 4123, 4604, 5004,
+  4978, 5174, 5263, 5631, 5933, 5248, 6889, 7205, 7059, 9791, 14178, 15535, 14569, 16136, 25912, 38539, 38508, 856532, 1459630];
+
+const $ = (sel, el = document) => el.querySelector(sel);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const pct = (a, b) => b ? Math.round(100 * a / b) + '%' : '–';
+const api = async (path, body) => {
+  const res = await fetch('/api/' + path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || res.statusText);
+  return json;
+};
+function fmtDur(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 90) return s + ' s';
+  const m = Math.round(s / 60);
+  return m < 90 ? m + ' min' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
+}
+
+/* ---------- setup form ---------- */
+const form = $('#setup');
+for (const name of ['p1', 'p2'])
+  form[name].innerHTML = Object.entries(STYLES).map(([v, label]) => `<option value="${v}">${label}</option>`).join('');
+
+function settings() {
+  return {
+    wonders: form.wonders.value, p1: form.p1.value, p2: form.p2.value,
+    playouts: +form.playouts.value || 0,
+    millis: $('#useMillis').checked ? Math.round(+$('#seconds').value * 1000) : 0,
+    games: +form.games.value || 0, parallel: +form.parallel.value || 1,
+  };
+}
+function estimateMs(s) {
+  const crowding = 1 + 0.15 * (s.parallel - 1); // measured: 3 games at once makes each ~1.3x slower
+  const decisions = s.wonders === 'random' ? RATE.slice(3) : RATE; // no draft picks to think about
+  const perBot = decisions.reduce((t, rate) => t + Math.min(s.playouts ? s.playouts / rate * crowding : Infinity, s.millis ? s.millis / 1000 : Infinity), 0);
+  const thinkers = [s.p1, s.p2].filter(c => c !== 'Random').length;
+  return (thinkers * perBot + 1.5) * 1000 * s.games / Math.min(s.parallel, s.games);
+}
+function refreshEstimate() {
+  $('#seconds').disabled = !$('#useMillis').checked;
+  const s = settings();
+  $('#estimate').innerHTML = s.games > 0 && (s.playouts || s.millis)
+    ? `<span class="hint" style="margin:0">Expected to take about</span><br><b>${fmtDur(estimateMs(s))}</b>
+       <p class="hint">${fmtDur(estimateMs(s) * Math.min(s.parallel, s.games) / s.games)} per game, ${Math.min(s.parallel, s.games)} at a time. Rough — it sharpens once the first games finish.</p>`
+    : `<span class="hint">Set how many games, and at least one thinking limit.</span>`;
+  try { localStorage.setItem('swd-settings', JSON.stringify({ ...s, useMillis: $('#useMillis').checked, seconds: $('#seconds').value })); } catch (e) { }
+}
+try {
+  const saved = JSON.parse(localStorage.getItem('swd-settings'));
+  for (const k of ['wonders', 'p1', 'p2', 'playouts', 'games', 'parallel']) if (saved[k] != null) form[k].value = saved[k];
+  $('#useMillis').checked = !!saved.useMillis; $('#seconds').value = saved.seconds || 1;
+} catch (e) { }
+form.addEventListener('input', refreshEstimate);
+form.querySelectorAll('.chips button').forEach(b => b.onclick = () => { form.playouts.value = b.dataset.v; refreshEstimate(); });
+form.onsubmit = async e => {
+  e.preventDefault();
+  $('#formError').textContent = '';
+  try {
+    const { id } = await api('runs', settings());
+    await loadRuns(id);
+  } catch (err) { $('#formError').textContent = err.message; }
+};
+
+/* ---------- runs ---------- */
+let run = null, pollTimer = null;
+const picker = $('#runPicker');
+picker.onchange = () => showRun(picker.value);
+
+async function loadRuns(select) {
+  const runs = await api('runs');
+  picker.innerHTML = runs.map(r => {
+    const s = r.settings, when = r.id.replace('_', ' ').replace(/-(\d\d)-(\d\d)$/, ':$1:$2').slice(5, 16);
+    return `<option value="${r.id}">${when} · ${s.p1.replace('MCTS_', '')} vs ${s.p2.replace('MCTS_', '')} · ${r.done}/${s.games}${r.state === 'running' ? ' · running' : ''}</option>`;
+  }).join('') || '<option value="">no simulations yet</option>';
+  const id = select || runs.find(r => r.state === 'running')?.id || picker.dataset.current || runs[0]?.id;
+  if (id) { picker.value = id; await showRun(id); } else renderEmpty();
+}
+async function showRun(id) {
+  clearTimeout(pollTimer);
+  picker.dataset.current = id;
+  run = await api('runs/' + id);
+  render();
+  $('#startBtn').disabled = run.state === 'running';
+  $('#startBtn').textContent = run.state === 'running' ? 'Simulation in progress…' : 'Start simulation';
+  if (run.state === 'running') pollTimer = setTimeout(() => showRun(id).catch(console.error), 2000);
+  else if (pollTimer !== null) { pollTimer = null; loadRuns(id); } // just finished: refresh the picker labels
+}
+function renderEmpty() {
+  $('#main').innerHTML = `<div class="card empty"><b>No simulations yet</b>Pick your settings on the left and press Start. Results fill in here game by game.</div>`;
+}
+
+/* ---------- results ---------- */
+function wilson(wins, n) { // 95% interval for a win share; behaves sensibly at tiny n, unlike the textbook formula
+  if (!n) return [0, 1];
+  const z = 1.96, p = wins / n, d = 1 + z * z / n, c = p + z * z / (2 * n), w = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n));
+  return [(c - w) / d, (c + w) / d];
+}
+const winner = g => g.outcome === 'PLAYER_1_VICTORY' ? 1 : g.outcome === 'PLAYER_2_VICTORY' ? 2 : 0;
+const botName = n => n ? `Bot ${n}` : 'Tie';
+
+function render() {
+  const s = run.settings, games = run.games, n = games.length;
+  const wins = [0, 1, 2].map(w => games.filter(g => winner(g) === w).length);
+  const left = s.games - run.done - run.failed.length;
+  let eta = '';
+  if (run.state === 'running')
+    eta = run.done >= s.parallel
+      ? ` · about ${fmtDur(run.elapsed_ms * left / run.done)} left`
+      : ` · about ${fmtDur(Math.max(0, estimateMs(s) - run.elapsed_ms))} left (first estimate)`;
+  const stateText = { running: 'Running', finished: 'Finished', stopped: 'Stopped early', interrupted: 'Interrupted' }[run.state];
+
+  const scored = games.filter(g => g.p1_vp != null);
+  const avg = (arr, f) => arr.length ? (arr.reduce((t, g) => t + f(g), 0) / arr.length).toFixed(1) : '–';
+  const tile = (big, small, color) => `<div class="card tile"><b${color ? ` style="color:${color}"` : ''}>${big}</b><span>${small}</span></div>`;
+
+  $('#main').innerHTML = `
+    <section class="card" id="progress">
+      <div class="row"><div style="flex:1"><b>${stateText}</b> · ${run.done} of ${s.games} games${run.failed.length ? ` · ${run.failed.length} crashed` : ''}
+        · ${fmtDur(run.elapsed_ms)} elapsed${eta}</div>
+        ${run.state === 'running' ? '<button class="danger" id="stopBtn">Stop</button>' : ''}</div>
+      <div class="bar"><i style="width:${100 * run.done / s.games}%"></i></div>
+      <div class="hint" style="margin:0"><span class="dot" style="background:var(--p1)"></span>Bot 1: ${STYLES[s.p1]} &nbsp;
+        <span class="dot" style="background:var(--p2)"></span>Bot 2: ${STYLES[s.p2]} &nbsp;·&nbsp;
+        ${s.wonders === 'draft' ? 'wonders drafted' : 'wonders dealt at random'} · ${s.playouts ? s.playouts.toLocaleString() + ' imagined games per move' : ''}${s.playouts && s.millis ? ', ' : ''}${s.millis ? 'max ' + s.millis / 1000 + ' s per move' : ''}</div>
+    </section>
+    ${n === 0 ? `<div class="card empty"><b>Waiting for the first game to finish…</b>Thinking bots take a minute or two per game.</div>` : `
+    <section class="tiles">
+      ${tile(pct(wins[1], n), `Bot 1 wins (${wins[1]})`, 'var(--p1)')}
+      ${tile(pct(wins[2], n), `Bot 2 wins (${wins[2]})`, 'var(--p2)')}
+      ${Object.entries(HOW).map(([k, h]) => tile(pct(games.filter(g => g.victory_type === k).length, n), `decided by ${h.label.toLowerCase()}`, h.color)).join('')}
+      ${tile(`${avg(scored, g => g.p1_vp)} – ${avg(scored, g => g.p2_vp)}`, 'average score, Bot 1 – Bot 2')}
+      ${tile(avg(games, g => g.moves), 'moves per game')}
+    </section>
+    <section class="charts">
+      <div class="card"><h2>Who won, and how</h2>${chartOutcomes(games)}</div>
+      <div class="card"><h2>Is the result settled yet?</h2>${chartRunning(games)}</div>
+      <div class="card"><h2>Final scores</h2>${chartScores(games)}</div>
+      <div class="card"><h2>Where the military pawn ended</h2>${chartPawn(games)}</div>
+    </section>
+    <section class="card"><h2>Every game — click one to replay it</h2>
+      <div class="tablewrap"><table><thead><tr><th>#</th><th>Winner</th><th>Decided by</th><th>Score</th><th>Military</th><th>Science</th><th>Wonders</th><th>Moves</th><th>Took</th></tr></thead>
+      <tbody>${games.map(g => `<tr data-n="${g.n}"><td>${g.n}</td>
+        <td><span class="dot" style="background:var(--${['tie', 'p1', 'p2'][winner(g)]})"></span>${botName(winner(g))}</td>
+        <td><span class="tag" style="background:${HOW[g.victory_type].color}">${HOW[g.victory_type].label}</span></td>
+        <td>${g.p1_vp == null ? '–' : `${g.p1_vp} – ${g.p2_vp}`}</td>
+        <td>${g.pawn === 0 ? 'even' : `Bot ${g.pawn > 0 ? 1 : 2} +${Math.abs(g.pawn)}`}</td>
+        <td>${g.p1_science} – ${g.p2_science}</td><td>${g.p1_wonders} – ${g.p2_wonders}</td>
+        <td>${g.moves}</td><td>${fmtDur(g.duration_ms)}</td></tr>`).join('')}</tbody></table></div>
+    </section>`}`;
+
+  const stop = $('#stopBtn');
+  if (stop) stop.onclick = () => api(`runs/${run.id}/stop`, {});
+  document.querySelectorAll('[data-n]').forEach(el => el.onclick = () => openGame(+el.dataset.n));
+}
+
+function chartOutcomes(games) {
+  const W = 420, rows = [1, 2], max = Math.max(1, ...rows.map(w => games.filter(g => winner(g) === w).length));
+  const ties = games.filter(g => winner(g) === 0).length;
+  let out = '';
+  rows.forEach((w, r) => {
+    let x = 60; const y = 12 + r * 46;
+    out += `<text x="0" y="${y + 19}" style="fill:var(--p${w});font-weight:600;font-size:13px">Bot ${w}</text>`;
+    for (const [k, h] of Object.entries(HOW)) {
+      const c = games.filter(g => winner(g) === w && g.victory_type === k).length, wd = c / max * (W - 100);
+      if (c) out += `<rect x="${x}" y="${y}" width="${wd}" height="30" rx="3" fill="${h.color}"><title>${c} by ${h.label.toLowerCase()}</title></rect>` +
+        (wd > 16 ? `<text x="${x + wd / 2}" y="${y + 19}" text-anchor="middle" style="fill:#fff;font-weight:600">${c}</text>` : '');
+      x += wd + (c ? 2 : 0);
+    }
+    out += `<text x="${x + 6}" y="${y + 19}">${games.filter(g => winner(g) === w).length}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} 108">${out}</svg>
+    <div class="legend">${Object.values(HOW).map(h => `<span><span class="dot" style="background:${h.color}"></span>${h.label}</span>`).join('')}${ties ? `<span>${ties} tied</span>` : ''}</div>`;
+}
+
+function chartRunning(games) {
+  const W = 420, H = 170, L = 34, R = 8, T = 8, B = 22, decided = games.filter(g => winner(g));
+  if (!decided.length) return '<p class="caption">No decided games yet.</p>';
+  const x = i => L + (decided.length === 1 ? 0.5 : i / (decided.length - 1)) * (W - L - R), y = v => T + (1 - v) * (H - T - B);
+  let w1 = 0; const pts = decided.map((g, i) => { w1 += winner(g) === 1; return { share: w1 / (i + 1), ci: wilson(w1, i + 1) }; });
+  const band = pts.map((p, i) => `${x(i)},${y(p.ci[1])}`).concat(pts.map((p, i) => `${x(i)},${y(p.ci[0])}`).reverse()).join(' ');
+  const last = pts[pts.length - 1], open = last.ci[0] <= 0.5 && last.ci[1] >= 0.5;
+  return `<svg viewBox="0 0 ${W} ${H}">
+    ${[0, .25, .5, .75, 1].map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" ${v === .5 ? 'stroke-dasharray="4 3" stroke="var(--muted)"' : ''}/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v * 100}%</text>`).join('')}
+    <polygon points="${band}" fill="var(--p1)" opacity=".18"/>
+    <polyline points="${pts.map((p, i) => `${x(i)},${y(p.share)}`).join(' ')}" fill="none" stroke="var(--p1)" stroke-width="2"/>
+    <text x="${L}" y="${H - 4}">game 1</text><text x="${W - R}" y="${H - 4}" text-anchor="end">game ${decided.length}</text></svg>
+    <p class="caption">Bot 1's share of wins as games come in; the shaded band is the honest uncertainty. ${open
+      ? `It still covers 50%, so <b>these ${decided.length} games can't yet tell the bots apart</b>.`
+      : `It has cleared 50%: <b>Bot ${last.share > .5 ? 1 : 2} is genuinely ahead</b> (${Math.round(last.ci[0] * 100)}–${Math.round(last.ci[1] * 100)}% for Bot 1).`}</p>`;
+}
+
+function chartScores(games) {
+  const W = 420, H = 250, L = 34, B = 30, T = 8, R = 8, pts = games.filter(g => g.p1_vp != null);
+  if (!pts.length) return '<p class="caption">No games have been scored yet.</p>';
+  const hi = Math.max(20, ...pts.flatMap(g => [g.p1_vp, g.p2_vp])) + 5, lo = Math.max(0, Math.min(...pts.flatMap(g => [g.p1_vp, g.p2_vp])) - 5);
+  const x = v => L + (v - lo) / (hi - lo) * (W - L - R), y = v => H - B - (v - lo) / (hi - lo) * (H - T - B);
+  const ticks = []; for (let v = Math.ceil(lo / 10) * 10; v <= hi; v += 10) ticks.push(v);
+  const skipped = games.length - pts.length;
+  return `<svg viewBox="0 0 ${W} ${H}">
+    <polygon points="${x(lo)},${y(lo)} ${x(hi)},${y(hi)} ${x(hi)},${y(lo)}" fill="var(--p1)" opacity=".07"/>
+    <polygon points="${x(lo)},${y(lo)} ${x(hi)},${y(hi)} ${x(lo)},${y(hi)}" fill="var(--p2)" opacity=".07"/>
+    ${ticks.map(v => `<text x="${x(v)}" y="${H - B + 14}" text-anchor="middle">${v}</text><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join('')}
+    <line x1="${x(lo)}" y1="${y(lo)}" x2="${x(hi)}" y2="${y(hi)}" stroke="var(--muted)" stroke-dasharray="4 3"/>
+    <text x="${W - R}" y="${H - B - 6}" text-anchor="end" style="fill:var(--p1)">Bot 1 outscored</text><text x="${L + 6}" y="${T + 10}" style="fill:var(--p2)">Bot 2 outscored</text>
+    ${pts.map(g => `<circle data-n="${g.n}" cx="${x(g.p1_vp)}" cy="${y(g.p2_vp)}" r="4.5" fill="${HOW[g.victory_type].color}" opacity=".8" style="cursor:pointer"><title>Game ${g.n}: ${g.p1_vp} – ${g.p2_vp}</title></circle>`).join('')}
+    <text x="${(W + L) / 2}" y="${H - 2}" text-anchor="middle">Bot 1 points →</text></svg>
+    <p class="caption">One dot per game; the further from the dashed line, the more lopsided. Click a dot to replay it.${skipped ? ` ${skipped} military win${skipped > 1 ? 's' : ''} not shown — those games end before scoring.` : ''}</p>`;
+}
+
+function chartPawn(games) {
+  const W = 420, H = 150, B = 34, bins = Array(19).fill(0);
+  games.forEach(g => bins[Math.max(-9, Math.min(9, g.pawn)) + 9]++);
+  const max = Math.max(...bins), bw = W / 19;
+  return `<svg viewBox="0 0 ${W} ${H}">${bins.map((c, i) => {
+    const pos = i - 9, h = c / max * (H - B - 14), color = pos === 0 ? 'var(--tie)' : pos > 0 ? 'var(--p1)' : 'var(--p2)';
+    return `<rect x="${i * bw + 2}" y="${H - B - h}" width="${bw - 4}" height="${h}" rx="2" fill="${color}" opacity="${Math.abs(pos) === 9 ? 1 : .65}"><title>${c} game${c === 1 ? '' : 's'}</title></rect>
+      ${c ? `<text x="${i * bw + bw / 2}" y="${H - B - h - 3}" text-anchor="middle">${c}</text>` : ''}
+      <text x="${i * bw + bw / 2}" y="${H - B + 13}" text-anchor="middle">${Math.abs(pos)}</text>`; }).join('')}
+    <text x="0" y="${H - 4}" style="fill:var(--p2)">← Bot 2 conquers</text><text x="${W}" y="${H - 4}" text-anchor="end" style="fill:var(--p1)">Bot 1 conquers →</text></svg>
+    <p class="caption">How far the conflict pawn sat from the centre when each game ended. 9 is a military win; a pile-up near 0 means the bots cancel each other out.</p>`;
+}
+
+/* ---------- single game replay ---------- */
+const dialog = $('#detail');
+let game = null, cursor = 0;
+
+async function openGame(n, move = 1) {
+  game = await api(`runs/${run.id}/games/${n}`);
+  game.n = n;
+    cursor = game.steps.length - 1;
+  const w = winner(game), how = HOW[game.victory_type];
+  dialog.innerHTML = `
+    <div class="dhead"><h3>Game ${n} — ${w ? `<span style="color:var(--p${w})">Bot ${w}</span> won` : 'a tie'}
+      <span class="tag" style="background:${how.color};font:12px system-ui;vertical-align:2px">${how.label}</span>
+      ${game.p1_vp == null ? '' : `<span style="color:var(--muted);font:14px system-ui"> ${game.p1_vp} – ${game.p2_vp}</span>`}</h3>
+      <button id="closeBtn">Close</button></div>
+    <div class="dbody">
+      <div id="timeline"></div>
+      <div class="scrub"><button id="prevBtn">◀</button><input type="range" id="scrubber" min="0" max="${game.steps.length - 1}"><button id="nextBtn">▶</button><span id="where" style="min-width:150px;text-align:right;color:var(--muted)"></span></div>
+      <div class="move" id="moveBox"></div>
+      <div id="board"></div>
+    </div>`;
+  $('#closeBtn').onclick = () => dialog.close();
+  dialog.onclose = () => history.replaceState(null, '', location.pathname);
+  $('#prevBtn').onclick = () => seek(cursor - 1);
+  $('#nextBtn').onclick = () => seek(cursor + 1);
+  $('#scrubber').oninput = e => seek(+e.target.value);
+  dialog.showModal();
+  seek(move - 1);
+}
+dialog.addEventListener('keydown', e => {
+  if (e.key === 'ArrowLeft') { seek(cursor - 1); e.preventDefault(); }
+  if (e.key === 'ArrowRight') { seek(cursor + 1); e.preventDefault(); }
+});
+
+function seek(i) {
+  cursor = Math.max(0, Math.min(game.steps.length - 1, i));
+  $('#scrubber').value = cursor;
+  history.replaceState(null, '', `#${run.id}/${game.n}/${cursor + 1}`); // bookmarkable replay
+  const step = game.steps[cursor];
+  $('#where').textContent = `Move ${cursor + 1} of ${game.steps.length} · ${PHASES[step.phase] || 'Game over'}`;
+  $('#timeline').innerHTML = timeline();
+  $('#timeline svg').onclick = e => {
+    const box = e.currentTarget.getBoundingClientRect(), f = ((e.clientX - box.left) / box.width * 900 - 40) / 850;
+    seek(Math.round(f * (game.steps.length - 1)));
+  };
+  renderMove(step);
+  renderBoard(step, game.steps[cursor - 1]);
+}
+
+function timeline() {
+  const steps = game.steps, n = steps.length, L = 40, W = 850, x = i => L + (n === 1 ? 0 : i / (n - 1)) * W;
+  // Shade alternate phases so the ages read at a glance
+  let bands = '', start = 0;
+  for (let i = 1; i <= n; i++) if (i === n || steps[i].phase !== steps[start].phase) {
+    const label = PHASES[steps[start].phase];
+    if (label) bands += `<rect x="${x(start)}" y="0" width="${x(i - 1) - x(start)}" height="306" fill="var(--ink)" opacity="${Object.keys(PHASES).indexOf(steps[start].phase) % 2 ? .05 : 0}"/><text x="${(x(start) + x(i - 1)) / 2}" y="322" text-anchor="middle">${label}</text>`;
+    start = i;
+  }
+  const line = (vals, y, color, dots) => {
+    const pts = vals.map((v, i) => v == null ? null : [x(i), y(v)]).filter(Boolean);
+    return dots ? pts.map(p => `<circle cx="${p[0]}" cy="${p[1]}" r="2.6" fill="${color}"/>`).join('')
+      : `<polyline points="${pts.map(p => p.join(',')).join(' ')}" fill="none" stroke="${color}" stroke-width="2"/>`;
+  };
+  const vpMax = Math.max(10, ...steps.flatMap(s => [s.p1.vp || 0, s.p2.vp || 0]));
+  const yVp = v => 98 - v / vpMax * 80, yPawn = v => 164 - v / 9 * 32, yConf = v => 298 - v * 66;
+  const conf = p => steps.map(s => s.player === p && s.values ? s.values[s.action] : null);
+  const strip = (y, title) => `<text x="${L}" y="${y}" style="font-weight:600">${title}</text>`;
+  return `<svg viewBox="0 0 900 326" style="cursor:pointer">${bands}
+    ${strip(10, 'Victory points')}<text x="${L - 6}" y="${yVp(vpMax) + 4}" text-anchor="end">${vpMax}</text><text x="${L - 6}" y="${yVp(0) + 4}" text-anchor="end">0</text>
+    ${line(steps.map(s => s.p1.vp), yVp, 'var(--p1)')}${line(steps.map(s => s.p2.vp), yVp, 'var(--p2)')}
+    ${strip(124, 'Military pawn')}<line x1="${L}" x2="${L + W}" y1="164" y2="164" stroke="var(--muted)" stroke-dasharray="3 3"/>
+    <text x="${L - 6}" y="${yPawn(9) + 4}" text-anchor="end" style="fill:var(--p1)">+9</text><text x="${L - 6}" y="${yPawn(-9) + 4}" text-anchor="end" style="fill:var(--p2)">−9</text>
+    ${line(steps.map(s => Math.max(-9, Math.min(9, s.pawn))), yPawn, 'var(--military)')}
+    ${strip(222, 'How good each bot thought its chosen move was — its estimated chance of the win it is playing for')}<text x="${L - 6}" y="${yConf(1) + 4}" text-anchor="end">100%</text><text x="${L - 6}" y="${yConf(0) + 4}" text-anchor="end">0%</text>
+    <line x1="${L}" x2="${L + W}" y1="${yConf(.5)}" y2="${yConf(.5)}" stroke="var(--line)"/>
+    ${line(conf(1), yConf, 'var(--p1)', true)}${line(conf(2), yConf, 'var(--p2)', true)}
+    <line x1="${x(cursor)}" x2="${x(cursor)}" y1="0" y2="306" stroke="var(--ink)" stroke-width="1.5"/></svg>`;
+}
+
+function renderMove(step) {
+  const forced = step.options === 1 ? ' <span class="hint">(only one legal move)</span>' : '';
+  let html = `<div class="what"><span class="dot" style="background:var(--p${step.player})"></span>Bot ${step.player}: ${esc(step.action)}${forced}</div>${step.note ? `<div class="hint">${esc(step.note)}</div>` : ''}`;
+  if (step.values) {
+    const opts = Object.entries(step.values).sort((a, b) => b[1] - a[1]), top = Math.max(...opts.map(o => o[1]), 1e-9);
+    html += `<p class="hint" style="margin:8px 0 4px">The ${opts.length} moves it weighed, by how often each won in its imagined games:</p>` +
+      opts.slice(0, 8).map(([a, v]) => `<div class="opt ${a === step.action ? 'chosen' : ''}"><span title="${esc(a)}">${esc(a)}</span>
+        <i><b style="width:${v / top * 100}%;background:var(--p${step.player});opacity:${a === step.action ? 1 : .4}"></b></i><span>${Math.round(v * 100)}%</span></div>`).join('') +
+      (opts.length > 8 ? `<p class="hint">…and ${opts.length - 8} weaker options.</p>` : '');
+  } else if (step.options > 1) html += `<p class="hint">Chosen at random from ${step.options} legal moves.</p>`;
+  $('#moveBox').innerHTML = html;
+}
+
+function renderBoard(step, prev) {
+  const chip = (name, fresh, ghost) => `<span class="chip${fresh ? ' new' : ''}${ghost ? ' ghost' : ''}" style="background:var(--${game.card_colors[name] || 'WONDER'})">${esc(name)}</span>`;
+  const city = p => {
+    const c = step['p' + p], before = prev ? prev['p' + p] : { buildings: [], wonders: [], tokens: [] };
+    const isNew = (list, name) => !before[list].includes(name);
+    const buildings = [...c.buildings].sort((a, b) => COLOR_ORDER.indexOf(game.card_colors[a]) - COLOR_ORDER.indexOf(game.card_colors[b]));
+    const s = run.settings;
+    return `<div class="city"><h4><span class="dot" style="background:var(--p${p})"></span>Bot ${p} <span class="hint">${STYLES[s['p' + p]].split(' — ')[0]}</span></h4>
+      <div class="stats"><span><b>${c.coins}</b> coins</span><span><b>${c.vp ?? '–'}</b> points</span><span><b>${c.science}</b>/6 science symbols</span></div>
+      <div class="chipset">${buildings.map(b => chip(b, isNew('buildings', b))).join('') || '<span class="hint">no buildings yet</span>'}</div>
+      <div class="chipset">${c.wonders.map(w => chip(w, isNew('wonders', w))).join('')}${c.unbuilt.map(w => chip(w, false, true)).join('')}</div>
+      <div class="chipset">${c.tokens.map(t => chip(t, isNew('tokens', t))).join('')}</div></div>`;
+  };
+  const pawn = Math.max(-9, Math.min(9, step.pawn));
+  $('#board').innerHTML = `
+    <div class="track">${Array.from({ length: 19 }, (_, i) => { const pos = i - 9, a = Math.abs(pos);
+      return `<div class="${pos === pawn ? 'pawn ' : ''}zone${a >= 6 ? 1 : a >= 3 ? 2 : 3}" style="${pos ? `background:var(--p${pos > 0 ? 1 : 2})` : ''}"></div>`; }).join('')}</div>
+    <div class="ends"><span>← Bot 2 winning the war</span><span>military track · reaching either end wins the game outright</span><span>Bot 1 winning the war →</span></div>
+    <div class="cities" style="margin-top:12px">${city(1)}${city(2)}</div>
+    <div class="legend" style="margin-top:10px">${COLOR_ORDER.map(c => `<span><span class="dot" style="background:var(--${c})"></span>${{ BROWN: 'raw materials', GRAY: 'manufactured', GOLD: 'commerce', BLUE: 'civic', GREEN: 'science', RED: 'military', PURPLE: 'guilds' }[c]}</span>`).join('')}
+      <span>dashed = wonder not built yet</span><span>outlined = gained this move</span></div>`;
+}
+
+api('info').then(info => { form.parallel.max = info.max_parallel; if (+form.parallel.value > info.max_parallel) form.parallel.value = info.max_parallel; refreshEstimate(); });
+refreshEstimate();
+const [linkedRun, linkedGame, linkedMove] = location.hash.slice(1).split('/');
+loadRuns(linkedRun || undefined).then(() => linkedGame && openGame(+linkedGame, +linkedMove || 1)).catch(err => { $('#main').innerHTML = `<div class="card empty"><b>Can't reach the simulator</b>${esc(err.message)}</div>`; });
+</script>
+</body>
+</html>

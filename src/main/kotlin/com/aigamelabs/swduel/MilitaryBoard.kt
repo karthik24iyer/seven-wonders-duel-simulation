@@ -8,7 +8,7 @@ import javax.json.stream.JsonGenerator
  * Represents the military situation.
  */
 data class MilitaryBoard(
-        private val conflictPawnPosition: Int,
+        val conflictPawnPosition: Int,
         val token1P1Present : Boolean,
         val token2P1Present : Boolean,
         val token1P2Present : Boolean,
@@ -100,7 +100,7 @@ data class MilitaryBoard(
         val updatedPosition = conflictPawnPosition + n
         var cost = 0
         cost += if (token1P1Present && updatedPosition >= +3) 2 else 0
-        cost += if (token1P1Present && updatedPosition >= +6) 5 else 0
+        cost += if (token2P1Present && updatedPosition >= +6) 5 else 0
         val updatedToken1P1Present = token1P1Present && updatedPosition < +3
         val updatedToken2P1Present = token2P1Present && updatedPosition < +6
         val updatedBoard = update(
@@ -115,7 +115,7 @@ data class MilitaryBoard(
         val updatedPosition = conflictPawnPosition - n
         var cost = 0
         cost += if (token1P2Present && updatedPosition <= -3) 2 else 0
-        cost += if (token1P2Present && updatedPosition <= -6) 5 else 0
+        cost += if (token2P2Present && updatedPosition <= -6) 5 else 0
         val updatedToken1P2Present = token1P2Present && updatedPosition > -3
         val updatedToken2P2Present = token2P2Present && updatedPosition > -6
         val updatedBoard = update(
