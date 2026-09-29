@@ -31,7 +31,7 @@
   .pill-btn { color: inherit; text-decoration: none; }
   .ctl button, .pill-btn { background: var(--felt); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
   .ctl button:hover, .pill-btn:hover { background: var(--felt-2); }
-  .ctl select { background: var(--felt); border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; }
+  .ctl select, #jump { background: var(--felt); border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; }
   .badge { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 99px; letter-spacing: .4px; text-transform: uppercase; }
   .badge.live { background: #f6c6c1; color: #9b3c33; }
   .badge.live::before { content: "● "; animation: blink 1.2s infinite; }
@@ -182,6 +182,7 @@
     </select>
     <span id="where"></span>
   </div>
+  <select id="jump" title="Jump to a game the running simulation is playing right now" hidden></select>
   <a href="/" title="Statistics and batch runs">← Arena</a>
 </header>
 <main id="main"></main>
@@ -448,20 +449,15 @@ const waiting = (msg, bad) => `<div class="launcher" style="text-align:center"><
 async function launcher() {
   $('#controls').hidden = true; $('#badge').innerHTML = ''; $('#title').textContent = '';
   const info = await api('info');
-  let running = '';
-  if (info.running) {
-    const r = await api('runs/' + info.running);
-    running = `<div class="or"><b>A batch is running</b> — ${r.done} of ${r.settings.games} games done. Watch one being played right now:<br>
-      ${r.running.map(n => `<a class="pill-btn" style="text-decoration:none" href="#${r.id}/${n}">Game ${n}</a>`).join('') || '<span style="color:var(--muted)">between games — try again in a moment</span>'}</div>`;
-  }
   const opts = Object.entries(STYLES).map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
-  $('#main').innerHTML = `<div class="launcher"><h2>Deal a game</h2><p>Pick two bots and watch them play at the table, move by move.</p>
+  $('#main').innerHTML = `<div class="launcher" id="liveNow" hidden></div><div class="launcher"><h2>Deal a game</h2><p>Pick two bots and watch them play at the table, move by move.</p>
     <label>Bot 1 (moves first)</label><select id="lp1">${opts}</select>
     <label>Bot 2</label><select id="lp2">${opts}</select>
     <label>Wonders</label><select id="lw"><option value="draft">Drafted, as in the rulebook</option><option value="random">Dealt at random</option></select>
     <label>Thinking per move</label><select id="lpl"><option value="1000">Quick — 1,000 imagined games</option><option value="5000" selected>Standard — 5,000</option><option value="20000">Deep — 20,000 (slow, about 7 min a game)</option></select>
     <button class="go" id="deal" ${info.running ? 'disabled style="opacity:.5;cursor:default"' : ''}>Deal</button>
-    <div class="err" id="lerr">${info.running ? 'Only one simulation runs at a time; wait for the batch or stop it in the Arena.' : ''}</div>${running}</div>`;
+    <div class="err" id="lerr">${info.running ? 'Only one simulation runs at a time; wait for the batch or stop it in the Arena.' : ''}</div></div>`;
+  liveGames();
   $('#lp2').value = 'MCTS_Opportunist';
   $('#deal').onclick = async () => {
     try {
@@ -484,6 +480,33 @@ function gallery() {
     <div style="display:flex;gap:12px;--cw:108px;--ch:162px">${[1, 2, 3, 'G'].map(a => `<div class="card">${CardArt.back(a)}</div>`).join('')}</div></div>`;
 }
 
+/* ------------------------------------------------ live games of a batch ---- */
+// Polls whichever run is in progress so any of its boards is one click away: a header dropdown everywhere,
+// plus a list on the launcher. Rebuilt only when the set of live games changes, so an open dropdown isn't yanked shut.
+let liveTimer, liveKey;
+async function liveGames() {
+  clearTimeout(liveTimer);
+  let r;
+  try { r = (await api('runs')).find(r => r.state === 'running'); } catch (e) {}
+  const games = r ? r.running : [];
+  const [hid, hn] = location.hash.slice(1).split('/');
+  const key = r ? `${r.id}:${games}:${r.done}:${hid}/${hn}:${!!$('#liveNow')}` : '';
+  if (key !== liveKey) {
+    liveKey = key;
+    $('#jump').hidden = !games.length;
+    $('#jump').innerHTML = `<option value="">● Live games (${games.length})</option>` + games.map(n =>
+      `<option value="${r.id}/${n}" ${hid === r.id && +hn === n ? 'selected' : ''}>Game ${n} of ${r.settings.games}</option>`).join('');
+    const box = $('#liveNow');
+    if (box) {
+      box.hidden = !r;
+      if (r) box.innerHTML = `<h2>Simulation in progress</h2><p>${r.done} of ${r.settings.games} games done · ${STYLES[r.settings.p1] || r.settings.p1} vs ${STYLES[r.settings.p2] || r.settings.p2}. Jump into a game being played right now:</p>
+        ${games.map(n => `<a class="pill-btn" style="display:inline-block;margin:4px 6px 0 0" href="#${r.id}/${n}">Game ${n}</a>`).join('') || '<span style="color:var(--muted)">between games — this refreshes on its own</span>'}`;
+    }
+  }
+  liveTimer = setTimeout(liveGames, 2000);
+}
+$('#jump').onchange = e => { if (e.target.value) location.hash = e.target.value; };
+
 async function route() {
   clearTimeout(timer); clearTimeout(pollTimer); $('.banner')?.remove();
   const [id, n, move] = location.hash.slice(1).split('/');
@@ -492,7 +515,7 @@ async function route() {
   steps = []; cursor = 0; pending = null; finished = false; failed = false; playing = true; gameN = +n; startAt = move ? +move : null;
   $('#main').innerHTML = waiting('Dealing the cards…');
   try { run = await api('runs/' + id); } catch (e) { $('#main').innerHTML = waiting(esc(e.message), true); return; }
-  poll();
+  poll(); liveGames();
 }
 window.addEventListener('hashchange', route);
 window.addEventListener('resize', () => steps.length && $('#table') && render());
